@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+
+# Streamlit
+.streamlit/secrets.toml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Large data files (don't commit to GitHub)
+*.tif
+*.tiff
+data/*.tif
+data/*.tiff
+
+# But DO include sample data
+!data/sample/*.tif
+!data/sample/*.tiff
+
+# Temp files
+*.tmp
+temp/
