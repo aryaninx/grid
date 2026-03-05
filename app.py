@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-app.py - Marine Survey Viewer with Complete Risk Assessment
+app.py - Marine Survey Viewer with Interactive Risk Overlay
 """
 
 import streamlit as st
@@ -32,14 +32,21 @@ if 'raster_layers' not in st.session_state:
     st.session_state.raster_layers = []
 if 'vector_layers' not in st.session_state:
     st.session_state.vector_layers = []
-if 'mag_points' not in st.session_state:
-    st.session_state.mag_points = []
+if 'all_hazards' not in st.session_state:
+    st.session_state.all_hazards = []
 if 'cable_route' not in st.session_state:
     st.session_state.cable_route = None
 
 st.title("⚠️ Marine Survey Risk Assessment")
 
-# Sidebar
+# MODE SELECTION
+st.sidebar.header("🎛️ View Mode")
+view_mode = st.sidebar.radio(
+    "Select View:",
+    ["📊 Survey Data View", "⚠️ Risk Overlay View"],
+    help="Survey view shows raw data. Risk overlay filters by risk level."
+)
+
 st.sidebar.header("📁 Data Loading")
 
 quality_preset = st.sidebar.radio(
@@ -76,9 +83,12 @@ def download_from_gdrive(file_id, output_path):
 
 @st.cache_data(show_spinner=False)
 def tif_to_png_base64(file_path, colormap='gray', max_size=500, is_sss=False, is_mag=False):
+    """Convert GeoTIFF to base64 PNG with better error handling."""
     try:
+        # Try to open with rasterio
         with rasterio.open(file_path) as src:
             orig_h, orig_w = src.height, src.width
+            
             if max_size >= 10000:
                 downsample = 1
                 out_h, out_w = orig_h, orig_w
@@ -87,6 +97,7 @@ def tif_to_png_base64(file_path, colormap='gray', max_size=500, is_sss=False, is
                 out_h = orig_h // downsample
                 out_w = orig_w // downsample
             
+            # Read data
             if src.count >= 3:
                 data = np.zeros((out_h, out_w, 3), dtype=np.float32)
                 for i in range(3):
@@ -100,7 +111,13 @@ def tif_to_png_base64(file_path, colormap='gray', max_size=500, is_sss=False, is
                 data = data.astype(np.float32)
                 is_rgb = False
             
-            bounds_wgs84 = transform_bounds(src.crs, 'EPSG:4326', *src.bounds)
+            # Transform bounds
+            try:
+                bounds_wgs84 = transform_bounds(src.crs, 'EPSG:4326', *src.bounds)
+            except Exception as e:
+                st.warning(f"CRS transformation issue: {e}. Assuming WGS84.")
+                bounds_wgs84 = src.bounds
+            
             nodata = src.nodata
             
             if is_rgb:
@@ -162,64 +179,73 @@ def tif_to_png_base64(file_path, colormap='gray', max_size=500, is_sss=False, is
             
             return img_base64, bounds_wgs84
             
+    except rasterio.errors.RasterioIOError as e:
+        st.error(f"❌ Not a valid GeoTIFF: {e}")
+        st.info("💡 Tip: Use GDAL to convert: gdal_translate -of GTiff input.tif output.tif")
+        return None, None
     except Exception as e:
-        st.error(f"Error: {str(e)}")
+        st.error(f"❌ Error processing file: {str(e)}")
+        import traceback
+        st.code(traceback.format_exc())
         return None, None
 
 
 def calculate_distance(lat1, lon1, lat2, lon2):
-    """Calculate distance between two points in meters."""
+    """Haversine distance in meters."""
     lon1, lat1, lon2, lat2 = map(radians, [lon1, lat1, lon2, lat2])
     dlon = lon2 - lon1
     dlat = lat2 - lat1
     a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
     c = 2 * asin(sqrt(a))
-    return c * 6371000  # Earth radius in meters
+    return c * 6371000
 
 
-def classify_risk(magnitude, distance_to_cable):
-    """Classify risk based on magnitude and distance."""
-    if magnitude > 50 and distance_to_cable < 50:
-        return "Critical"
-    elif magnitude > 50 or distance_to_cable < 50:
-        return "High"
-    elif magnitude > 20 or distance_to_cable < 100:
-        return "Medium"
-    else:
-        return "Low"
+def classify_risk(magnitude, distance_to_cable, feature_type="mag"):
+    """Classify risk level."""
+    if feature_type == "mag":
+        if magnitude > 50 and distance_to_cable < 50:
+            return "Critical"
+        elif magnitude > 50 or distance_to_cable < 50:
+            return "High"
+        elif magnitude > 20 or distance_to_cable < 100:
+            return "Medium"
+        else:
+            return "Low"
+    return "Low"
 
 
-def estimate_cost(risk, magnitude):
-    """Estimate clearance/investigation cost."""
+def estimate_cost(risk, magnitude, feature_type="mag"):
+    """Estimate cost range."""
     if risk == "Critical":
         if magnitude > 100:
-            return "£100,000 - £200,000"  # Likely UXO
+            return "£100,000 - £200,000"
         else:
-            return "£50,000 - £75,000"  # Wreck clearance
+            return "£50,000 - £75,000"
     elif risk == "High":
-        return "£20,000 - £40,000"  # ROV survey + possible clearance
+        return "£20,000 - £40,000"
     elif risk == "Medium":
-        return "£5,000 - £15,000"  # ROV investigation
+        return "£5,000 - £15,000"
     else:
-        return "£1,000 - £5,000"  # Monitoring
+        return "£1,000 - £5,000"
 
 
-def recommend_action(risk, magnitude, distance):
-    """Recommend action based on risk."""
+def recommend_action(risk, magnitude, distance, feature_type="mag"):
+    """Recommend action."""
     if risk == "Critical":
         if magnitude > 100:
             return "UXO clearance required"
         else:
             return "Immediate clearance or route alteration"
     elif risk == "High":
-        return "ROV survey for classification, likely clearance"
+        return "ROV survey + likely clearance"
     elif risk == "Medium":
-        return "ROV investigation recommended"
+        return "ROV investigation"
     else:
         return "Monitor during installation"
 
 
-def create_map(raster_layers, vector_layers, mag_points, cable_route, basemap_choice):
+def create_map(raster_layers, vector_layers, hazards, cable_route, basemap_choice, risk_filter=None):
+    """Create map with optional risk filtering."""
     all_bounds = [b for _, b in raster_layers if b]
     
     if all_bounds:
@@ -239,6 +265,7 @@ def create_map(raster_layers, vector_layers, mag_points, cable_route, basemap_ch
     else:
         m = folium.Map(location=[center_lat, center_lon], zoom_start=13, tiles='OpenStreetMap')
     
+    # Add rasters
     for i, (img_base64, bounds) in enumerate(raster_layers):
         if img_base64 and bounds:
             img_url = f"data:image/png;base64,{img_base64}"
@@ -250,58 +277,108 @@ def create_map(raster_layers, vector_layers, mag_points, cable_route, basemap_ch
                 name=f"Raster {i+1}"
             ).add_to(m)
     
+    # Add vectors
     for gdf, color, name in vector_layers:
         if gdf is not None:
             gdf_wgs84 = gdf.to_crs('EPSG:4326') if gdf.crs and str(gdf.crs) != 'EPSG:4326' else gdf
             folium.GeoJson(gdf_wgs84, name=name,
                          style_function=lambda x, c=color: {'color': c, 'weight': 2}).add_to(m)
     
-    # Draw cable route if provided
+    # Add cable route
     if cable_route:
-        folium.PolyLine(
-            cable_route,
-            color='blue',
-            weight=3,
-            opacity=0.8,
-            popup='Cable Route'
+        folium.PolyLine(cable_route, color='blue', weight=3, opacity=0.8, popup='Cable Route').add_to(m)
+    
+    # Filter hazards by risk level
+    if risk_filter:
+        filtered_hazards = [h for h in hazards if h['risk'] in risk_filter]
+    else:
+        filtered_hazards = hazards
+    
+    # Add hazard markers with detailed popups
+    for hazard in filtered_hazards:
+        risk = hazard['risk']
+        magnitude = hazard.get('magnitude', 0)
+        distance = hazard.get('distance_to_cable', 999)
+        
+        # Color by risk
+        if risk == "Critical":
+            color = 'red'
+        elif risk == "High":
+            color = 'orange'
+        elif risk == "Medium":
+            color = 'yellow'
+        else:
+            color = 'green'
+        
+        # Detailed popup with ALL information
+        popup_html = f"""
+        <div style="width:300px; font-family: Arial;">
+            <h3 style="margin:0; color:{color}; border-bottom:2px solid {color}; padding-bottom:5px;">
+                {hazard.get('type', 'Mag Anomaly')} - {hazard.get('id', 'N/A')}
+            </h3>
+            
+            <div style="margin-top:10px;">
+                <h4 style="margin:5px 0; color:#333;">📊 Classification</h4>
+                <p style="margin:5px 0;"><b>Risk Level:</b> <span style="color:{color}; font-weight:bold;">{risk}</span></p>
+                <p style="margin:5px 0;"><b>Magnitude:</b> {magnitude:.1f} nT</p>
+                <p style="margin:5px 0;"><b>Distance to Cable:</b> {distance:.0f}m</p>
+            </div>
+            
+            <div style="margin-top:10px; background:#f0f0f0; padding:8px; border-radius:4px;">
+                <h4 style="margin:5px 0; color:#333;">🎯 Recommended Action</h4>
+                <p style="margin:5px 0;">{hazard.get('action', 'Monitor')}</p>
+            </div>
+            
+            <div style="margin-top:10px; background:#fff3cd; padding:8px; border-radius:4px;">
+                <h4 style="margin:5px 0; color:#333;">💰 Estimated Cost</h4>
+                <p style="margin:5px 0; font-weight:bold;">{hazard.get('cost', 'TBD')}</p>
+            </div>
+            
+            <div style="margin-top:10px; font-size:11px; color:#666;">
+                <p style="margin:2px 0;">Lat: {hazard['lat']:.6f}</p>
+                <p style="margin:2px 0;">Lon: {hazard['lon']:.6f}</p>
+            </div>
+        </div>
+        """
+        
+        # Tooltip on hover - summary info
+        tooltip_text = f"""
+        <div style="font-family:Arial; padding:5px;">
+            <b>{hazard.get('type', 'Mag Anomaly')}</b><br>
+            Risk: <b style="color:{color}">{risk}</b><br>
+            {magnitude:.1f} nT | {distance:.0f}m from cable<br>
+            <i>{hazard.get('action', 'Monitor')}</i><br>
+            <b>{hazard.get('cost', 'TBD')}</b>
+        </div>
+        """
+        
+        folium.CircleMarker(
+            location=[hazard['lat'], hazard['lon']],
+            radius=8 if risk in ["Critical", "High"] else 5,
+            color=color,
+            fill=True,
+            fillColor=color,
+            fillOpacity=0.7,
+            popup=folium.Popup(popup_html, max_width=320),
+            tooltip=folium.Tooltip(tooltip_text)
         ).add_to(m)
     
-    # Add mag points with risk classification
-    if mag_points:
-        for point in mag_points:
-            magnitude = point.get('magnitude', 0)
-            risk = point.get('risk', 'Low')
-            distance = point.get('distance_to_cable', 999)
-            
-            # Color by risk
-            if risk == "Critical":
-                color = 'red'
-            elif risk == "High":
-                color = 'orange'
-            elif risk == "Medium":
-                color = 'yellow'
-            else:
-                color = 'green'
-            
-            popup_html = f"""<div style="width:250px;">
-                <h4 style="color:{color};">Mag Anomaly</h4>
-                <p><b>Magnitude:</b> {magnitude:.1f} nT</p>
-                <p><b>Risk Level:</b> {risk}</p>
-                <p><b>Distance to Cable:</b> {distance:.0f}m</p>
-                <p><b>Action:</b> {point.get('action', 'Monitor')}</p>
-                <p><b>Est. Cost:</b> {point.get('cost', 'TBD')}</p>
-                </div>"""
-            
-            folium.CircleMarker(
-                location=[point['lat'], point['lon']],
-                radius=6 if risk in ["Critical", "High"] else 4,
-                color=color,
-                fill=True,
-                fillColor=color,
-                fillOpacity=0.7,
-                popup=folium.Popup(popup_html, max_width=250),
-                tooltip=f"{magnitude:.1f}nT - {risk}"
-            ).add_to(m)
+    # Add legend
+    legend_html = f"""
+    <div style="position: fixed; bottom: 50px; right: 50px; width: 200px; 
+                background-color: white; z-index:9999; border:2px solid grey; 
+                border-radius: 5px; padding: 10px; box-shadow: 2px 2px 6px rgba(0,0,0,0.3);">
+        <h4 style="margin:0 0 10px 0;">Risk Legend</h4>
+        <p style="margin:5px 0;"><span style="color:#DC143C; font-size:20px;">●</span> Critical</p>
+        <p style="margin:5px 0;"><span style="color:#FF8C00; font-size:20px;">●</span> High</p>
+        <p style="margin:5px 0;"><span style="color:#FFD700; font-size:20px;">●</span> Medium</p>
+        <p style="margin:5px 0;"><span style="color:#32CD32; font-size:20px;">●</span> Low</p>
+        <hr style="margin:10px 0;">
+        <p style="margin:5px 0; font-size:12px;"><b>Showing:</b> {len(filtered_hazards)} hazards</p>
+        <p style="margin:5px 0; font-size:11px; color:#666;"><i>Hover for details<br>Click for full info</i></p>
+    </div>
+    """
+    m.get_root().html.add_child(folium.Element(legend_html))
     
     folium.plugins.Fullscreen().add_to(m)
     folium.plugins.MousePosition().add_to(m)
@@ -313,13 +390,12 @@ def create_map(raster_layers, vector_layers, mag_points, cable_route, basemap_ch
 
 # DATA LOADING
 st.sidebar.subheader("📡 Sidescan (SSS)")
-sss_ids = st.sidebar.text_area("SSS File IDs", height=100)
+sss_ids = st.sidebar.text_area("SSS File IDs", height=80)
 
-if sss_ids and st.sidebar.button("🚀 Load SSS", type="primary"):
+if sss_ids and st.sidebar.button("🚀 Load SSS"):
     sss_id_list = [fid.strip() for fid in sss_ids.strip().split('\n') if fid.strip()]
     
-    progress_container = st.container()
-    with progress_container:
+    with st.container():
         st.info(f"Loading {len(sss_id_list)} SSS tiles...")
         progress_bar = st.progress(0)
         status_text = st.empty()
@@ -338,15 +414,15 @@ if sss_ids and st.sidebar.button("🚀 Load SSS", type="primary"):
                     os.unlink(tmp.name)
                 progress_bar.progress((i + 1) / len(sss_id_list))
             except Exception as e:
-                status_text.warning(f"Tile {i+1} failed: {e}")
+                status_text.warning(f"Tile {i+1} failed")
         
         progress_bar.empty()
         status_text.empty()
-        st.success(f"✅ Loaded {success_count}/{len(sss_id_list)} SSS tiles!")
+        st.success(f"✅ {success_count}/{len(sss_id_list)} SSS tiles loaded!")
 
 # MBES
 st.sidebar.subheader("🗺️ MBES")
-mbes_ids = st.sidebar.text_area("MBES File IDs", height=50)
+mbes_ids = st.sidebar.text_area("MBES File IDs", height=40)
 
 if mbes_ids and st.sidebar.button("Load MBES"):
     for file_id in [fid.strip() for fid in mbes_ids.strip().split('\n') if fid.strip()]:
@@ -356,32 +432,14 @@ if mbes_ids and st.sidebar.button("Load MBES"):
                 img, bounds = tif_to_png_base64(tmp.name, colormap=mbes_colormap, max_size=max_pixels)
                 if img and bounds:
                     st.session_state.raster_layers.append((img, bounds))
+                    st.success("✅ MBES loaded!")
                 os.unlink(tmp.name)
             except Exception as e:
-                st.error(f"Failed: {e}")
-    st.success("✅ MBES loaded!")
+                st.error(f"Failed to load MBES")
 
-# Mag TIF
-st.sidebar.subheader("🧲 Mag TIF")
-mag_tif_ids = st.sidebar.text_area("Mag TIF File IDs", height=50)
-
-if mag_tif_ids and st.sidebar.button("Load Mag TIF"):
-    for file_id in [fid.strip() for fid in mag_tif_ids.strip().split('\n') if fid.strip()]:
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.tif') as tmp:
-            try:
-                download_from_gdrive(file_id, tmp.name)
-                img, bounds = tif_to_png_base64(tmp.name, colormap='seismic',
-                                               max_size=max_pixels, is_mag=True)
-                if img and bounds:
-                    st.session_state.raster_layers.append((img, bounds))
-                os.unlink(tmp.name)
-            except Exception as e:
-                st.error(f"Failed: {e}")
-    st.success("✅ Mag TIF loaded!")
-
-# CABLE ROUTE
-st.sidebar.subheader("🔌 Cable Route (GeoJSON)")
-cable_id = st.sidebar.text_input("Cable Route File ID")
+# Cable Route
+st.sidebar.subheader("🔌 Cable Route")
+cable_id = st.sidebar.text_input("Cable GeoJSON File ID")
 
 if cable_id and st.sidebar.button("Load Cable"):
     with tempfile.NamedTemporaryFile(delete=False, suffix='.geojson') as tmp:
@@ -390,7 +448,6 @@ if cable_id and st.sidebar.button("Load Cable"):
             gdf = gpd.read_file(tmp.name)
             gdf_wgs84 = gdf.to_crs('EPSG:4326') if gdf.crs else gdf
             
-            # Extract coordinates
             coords = []
             for geom in gdf_wgs84.geometry:
                 if geom.geom_type == 'LineString':
@@ -401,24 +458,21 @@ if cable_id and st.sidebar.button("Load Cable"):
             
             st.session_state.cable_route = coords
             st.session_state.vector_layers.append((gdf_wgs84, 'blue', 'Cable'))
-            st.success(f"✅ Cable route loaded ({len(coords)} points)")
+            st.success(f"✅ Cable route loaded!")
             os.unlink(tmp.name)
         except Exception as e:
             st.error(f"Error: {e}")
 
-# MAG CSV with Risk Classification
+# Mag CSV - Process into hazards
 st.sidebar.subheader("🎯 Mag Targets CSV")
-
-mag_csv_file = st.sidebar.file_uploader("Upload Mag Targets CSV", type=['csv'])
+mag_csv_file = st.sidebar.file_uploader("Upload Mag CSV", type=['csv'])
 
 if mag_csv_file is not None:
     try:
         df = pd.read_csv(mag_csv_file)
         
-        # Find columns
         if 'Latitude' in df.columns and 'Longitude' in df.columns:
-            lat_col = 'Latitude'
-            lon_col = 'Longitude'
+            lat_col, lon_col = 'Latitude', 'Longitude'
         else:
             lat_col = lon_col = None
             for col in df.columns:
@@ -435,51 +489,34 @@ if mag_csv_file is not None:
                 break
         
         if lat_col and lon_col and mag_col:
-            st.sidebar.success(f"✅ Found {len(df)} targets")
-            
-            # Threshold filter
-            mag_threshold = st.sidebar.slider("Min Magnitude (nT)", 0,
-                                             int(df[mag_col].max()), 5)
+            mag_threshold = st.sidebar.slider("Min Magnitude (nT)", 0, int(df[mag_col].max()), 5)
             df_filtered = df[df[mag_col] > mag_threshold]
-            
-            # Risk filter
-            risk_filter = st.sidebar.multiselect(
-                "Show Risk Levels",
-                ["Critical", "High", "Medium", "Low"],
-                default=["Critical", "High", "Medium", "Low"]
-            )
             
             st.sidebar.info(f"Processing {len(df_filtered)} targets...")
             
-            # Calculate distances and classify risks
-            st.session_state.mag_points = []
+            # Process all hazards
+            st.session_state.all_hazards = []
             
-            for _, row in df_filtered.iterrows():
+            for idx, row in df_filtered.iterrows():
                 lat = row[lat_col]
                 lon = row[lon_col]
                 magnitude = row[mag_col]
                 
-                # Calculate distance to cable
                 if st.session_state.cable_route:
                     min_distance = min(
                         calculate_distance(lat, lon, cable_lat, cable_lon)
                         for cable_lat, cable_lon in st.session_state.cable_route
                     )
                 else:
-                    min_distance = 999  # Unknown
+                    min_distance = 999
                 
-                # Classify risk
                 risk = classify_risk(magnitude, min_distance)
-                
-                # Filter by risk
-                if risk not in risk_filter:
-                    continue
-                
-                # Get action and cost
                 action = recommend_action(risk, magnitude, min_distance)
                 cost = estimate_cost(risk, magnitude)
                 
-                st.session_state.mag_points.append({
+                st.session_state.all_hazards.append({
+                    'id': f"MAG-{idx+1:03d}",
+                    'type': 'Mag Anomaly',
                     'lat': lat,
                     'lon': lon,
                     'magnitude': magnitude,
@@ -489,7 +526,7 @@ if mag_csv_file is not None:
                     'cost': cost
                 })
             
-            st.sidebar.success(f"✅ Showing {len(st.session_state.mag_points)} targets")
+            st.sidebar.success(f"✅ {len(st.session_state.all_hazards)} hazards processed!")
             
     except Exception as e:
         st.sidebar.error(f"Error: {e}")
@@ -497,105 +534,100 @@ if mag_csv_file is not None:
 if st.sidebar.button("🗑️ Clear All"):
     st.session_state.raster_layers = []
     st.session_state.vector_layers = []
-    st.session_state.mag_points = []
+    st.session_state.all_hazards = []
     st.session_state.cable_route = None
     st.success("Cleared!")
     st.rerun()
 
-# RISK SUMMARY
-if st.session_state.mag_points:
-    st.subheader("📊 Risk Summary")
+# RISK OVERLAY MODE
+if view_mode == "⚠️ Risk Overlay View":
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("⚠️ Risk Filter")
     
-    col1, col2, col3, col4, col5 = st.columns(5)
-    
-    with col1:
-        critical = sum(1 for p in st.session_state.mag_points if p['risk'] == 'Critical')
-        st.metric("🔴 Critical", critical)
-    
-    with col2:
-        high = sum(1 for p in st.session_state.mag_points if p['risk'] == 'High')
-        st.metric("🟠 High", high)
-    
-    with col3:
-        medium = sum(1 for p in st.session_state.mag_points if p['risk'] == 'Medium')
-        st.metric("🟡 Medium", medium)
-    
-    with col4:
-        low = sum(1 for p in st.session_state.mag_points if p['risk'] == 'Low')
-        st.metric("🟢 Low", low)
-    
-    with col5:
-        # Calculate total cost (min values)
-        total_cost = 0
-        for p in st.session_state.mag_points:
-            cost_str = p['cost'].replace('£', '').replace(',', '')
-            if '-' in cost_str:
-                min_cost = int(cost_str.split('-')[0].strip())
-                total_cost += min_cost
-        st.metric("💰 Min Cost", f"£{total_cost:,}")
-
-# MAP
-if st.session_state.raster_layers or st.session_state.mag_points:
-    st.subheader("🗺️ Risk Assessment Map")
-    
-    m = create_map(st.session_state.raster_layers, st.session_state.vector_layers,
-                  st.session_state.mag_points, st.session_state.cable_route, basemap)
-    st_folium(m, width=1400, height=700, key="risk_map")
-
-# HAZARD REGISTER
-if st.session_state.mag_points:
-    st.subheader("📋 Hazard Register")
-    
-    df_hazards = pd.DataFrame(st.session_state.mag_points)
-    
-    # Add ID column
-    df_hazards.insert(0, 'ID', [f"MAG-{i+1:03d}" for i in range(len(df_hazards))])
-    
-    # Sort by risk
-    risk_order = {"Critical": 0, "High": 1, "Medium": 2, "Low": 3}
-    df_hazards['risk_order'] = df_hazards['risk'].map(risk_order)
-    df_hazards = df_hazards.sort_values(['risk_order', 'magnitude'], ascending=[True, False])
-    df_hazards = df_hazards.drop('risk_order', axis=1)
-    
-    # Display
-    st.dataframe(
-        df_hazards[['ID', 'magnitude', 'risk', 'distance_to_cable', 'action', 'cost']],
-        use_container_width=True,
-        height=400
+    risk_filter = st.sidebar.multiselect(
+        "Show Risk Levels:",
+        ["Critical", "High", "Medium", "Low"],
+        default=["Critical", "High"],
+        help="Select which risk levels to display on the map"
     )
     
-    # Export
-    csv = df_hazards.to_csv(index=False)
-    st.download_button(
-        "📥 Download Hazard Register (CSV)",
-        csv,
-        f"hazard_register_{datetime.now().strftime('%Y%m%d')}.csv",
-        "text/csv"
-    )
-    
-    # Breakdown
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("### Actions Required")
-        actions = df_hazards.groupby('action').size().reset_index(name='count')
-        for _, row in actions.iterrows():
-            st.write(f"• {row['action']}: **{row['count']}** items")
-    
-    with col2:
-        st.markdown("### Cost Breakdown by Risk")
-        for risk in ["Critical", "High", "Medium", "Low"]:
-            risk_items = df_hazards[df_hazards['risk'] == risk]
-            if len(risk_items) > 0:
-                costs = []
-                for cost_str in risk_items['cost']:
-                    cost_clean = cost_str.replace('£', '').replace(',', '')
-                    if '-' in cost_clean:
-                        min_cost = int(cost_clean.split('-')[0].strip())
-                        costs.append(min_cost)
-                
-                total = sum(costs)
-                st.write(f"• {risk}: **£{total:,}** ({len(risk_items)} items)")
+    # Summary
+    if st.session_state.all_hazards:
+        filtered = [h for h in st.session_state.all_hazards if h['risk'] in risk_filter]
+        
+        st.subheader(f"📊 Risk Summary - Showing {risk_filter}")
+        
+        col1, col2, col3, col4, col5 = st.columns(5)
+        
+        with col1:
+            critical = sum(1 for h in filtered if h['risk'] == 'Critical')
+            st.metric("🔴 Critical", critical)
+        
+        with col2:
+            high = sum(1 for h in filtered if h['risk'] == 'High')
+            st.metric("🟠 High", high)
+        
+        with col3:
+            medium = sum(1 for h in filtered if h['risk'] == 'Medium')
+            st.metric("🟡 Medium", medium)
+        
+        with col4:
+            low = sum(1 for h in filtered if h['risk'] == 'Low')
+            st.metric("🟢 Low", low)
+        
+        with col5:
+            total_cost = 0
+            for h in filtered:
+                cost_str = h['cost'].replace('£', '').replace(',', '')
+                if '-' in cost_str:
+                    min_cost = int(cost_str.split('-')[0].strip())
+                    total_cost += min_cost
+            st.metric("💰 Min Cost", f"£{total_cost:,}")
+        
+        st.subheader("🗺️ Risk Overlay Map")
+        st.info("💡 **Hover** over markers for quick info | **Click** for detailed breakdown")
+        
+        m = create_map(st.session_state.raster_layers, st.session_state.vector_layers,
+                      st.session_state.all_hazards, st.session_state.cable_route, basemap, risk_filter)
+        st_folium(m, width=1400, height=700)
+        
+        # Summary tables
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("### 🎯 Actions Required")
+            df_filtered = pd.DataFrame(filtered)
+            actions = df_filtered.groupby('action').size().reset_index(name='count')
+            for _, row in actions.iterrows():
+                st.write(f"• **{row['action']}**: {row['count']} items")
+        
+        with col2:
+            st.markdown("### 💰 Cost Breakdown")
+            for risk in ["Critical", "High", "Medium", "Low"]:
+                risk_items = [h for h in filtered if h['risk'] == risk]
+                if risk_items:
+                    costs = []
+                    for h in risk_items:
+                        cost_str = h['cost'].replace('£', '').replace(',', '')
+                        if '-' in cost_str:
+                            costs.append(int(cost_str.split('-')[0].strip()))
+                    st.write(f"• **{risk}**: £{sum(costs):,} ({len(risk_items)} items)")
+    else:
+        st.info("Load mag targets CSV to enable risk overlay mode")
 
+# SURVEY DATA MODE
 else:
-    st.info("👆 Load survey data and mag targets to begin risk assessment")
+    if st.session_state.raster_layers or st.session_state.all_hazards:
+        st.subheader("🗺️ Survey Data Map")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("Rasters", len(st.session_state.raster_layers))
+        with col2:
+            st.metric("Hazards", len(st.session_state.all_hazards))
+        
+        m = create_map(st.session_state.raster_layers, st.session_state.vector_layers,
+                      st.session_state.all_hazards, st.session_state.cable_route, basemap)
+        st_folium(m, width=1400, height=700)
+    else:
+        st.info("👆 Load survey data to begin")
