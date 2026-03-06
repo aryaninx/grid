@@ -256,7 +256,7 @@ def create_map(raster_layers, vector_layers, hazards, turbines, sbp_lines, mag_t
                 pass
     
     # Add SBP lines (if toggle on)
-    if show_sbp and sbp_lines:
+    if show_sbp and sbp_lines is not None and len(sbp_lines) > 0:
         try:
             gdf_sbp = sbp_lines.to_crs('EPSG:4326') if sbp_lines.crs else sbp_lines
             folium.GeoJson(
@@ -273,7 +273,7 @@ def create_map(raster_layers, vector_layers, hazards, turbines, sbp_lines, mag_t
             pass
     
     # Add turbines
-    if turbines:
+    if turbines is not None and len(turbines) > 0:
         try:
             gdf_turb = turbines.to_crs('EPSG:4326') if turbines.crs else turbines
             for idx, row in gdf_turb.iterrows():
@@ -291,7 +291,7 @@ def create_map(raster_layers, vector_layers, hazards, turbines, sbp_lines, mag_t
             pass
     
     # Add hazards with detailed popups
-    if hazards:
+    if hazards is not None and len(hazards) > 0:
         try:
             gdf_haz = hazards.to_crs('EPSG:4326') if hazards.crs else hazards
             for idx, row in gdf_haz.iterrows():
@@ -488,7 +488,7 @@ if st.sidebar.button("🗑️ Clear All"):
 # HAZARD FILTERS
 # ==============================================================================
 
-if not st.session_state.hazards.empty if isinstance(st.session_state.hazards, gpd.GeoDataFrame) else len(st.session_state.hazards) > 0:
+if st.session_state.hazards is not None and len(st.session_state.hazards) > 0:
     st.sidebar.markdown("---")
     st.sidebar.subheader("🔍 Hazard Filters")
     
