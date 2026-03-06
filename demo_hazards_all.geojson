@@ -1,0 +1,286 @@
+{
+  "type": "FeatureCollection",
+  "name": "offshore_wind_hazards",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {"type": "Point", "coordinates": [0.14578, 53.77177]},
+      "properties": {
+        "id": "WRK-001",
+        "hazard_type": "Wreck",
+        "name": "Steel Trawler",
+        "size": "45m × 12m × 3.8m (L×W×H)",
+        "detected_by": ["SSS", "MBES", "Magnetometer"],
+        "distance_to_turbine_m": 127,
+        "nearest_turbine": "T-05",
+        "risk": "Critical",
+        "risk_score": 9.2,
+        "action": "Clearance or route alteration required",
+        "cost": "£75,000 - £150,000",
+        "investigation_timeline": "3 months",
+        "expected_failure": "3 months",
+        "details": "Upstanding steel wreck confirmed by 245nT mag anomaly. SSS shows 45m target with 15m acoustic shadow. MBES relief 3.8m."
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {"type": "Point", "coordinates": [0.15192, 53.77224]},
+      "properties": {
+        "id": "WRK-002",
+        "hazard_type": "Wreck",
+        "name": "Wooden Wreck",
+        "size": "28m × 8m × 1.2m",
+        "detected_by": ["SSS", "MBES"],
+        "distance_to_turbine_m": 234,
+        "nearest_turbine": "T-06",
+        "risk": "Medium",
+        "risk_score": 5.1,
+        "action": "Archaeological assessment required",
+        "cost": "£15,000 - £30,000",
+        "investigation_timeline": "1 year",
+        "expected_failure": "N/A",
+        "details": "Partially buried wooden wreck. Low magnetic signature (8nT). Possible historical significance."
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {"type": "Point", "coordinates": [0.1483, 53.77356]},
+      "properties": {
+        "id": "UXO-001",
+        "hazard_type": "UXO",
+        "name": "Probable UXO",
+        "size": "2.5m × 0.5m (estimated)",
+        "detected_by": ["Magnetometer", "SBP"],
+        "distance_to_turbine_m": 89,
+        "nearest_turbine": "T-08",
+        "risk": "Critical",
+        "risk_score": 9.8,
+        "action": "UXO specialist clearance required",
+        "cost": "£150,000 - £250,000",
+        "investigation_timeline": "3 months",
+        "expected_failure": "3 months",
+        "details": "Strong dipole magnetic anomaly (187nT). SBP shows buried target at 1.2m depth. No surface expression on SSS - buried ordnance highly probable."
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {"type": "Point", "coordinates": [0.1440, 53.77483]},
+      "properties": {
+        "id": "UXO-002",
+        "hazard_type": "UXO",
+        "name": "Possible UXO",
+        "size": "1.5m × 0.3m (estimated)",
+        "detected_by": ["Magnetometer"],
+        "distance_to_turbine_m": 156,
+        "nearest_turbine": "T-09",
+        "risk": "High",
+        "risk_score": 7.5,
+        "action": "ROV investigation + potential clearance",
+        "cost": "£50,000 - £100,000",
+        "investigation_timeline": "6 months",
+        "expected_failure": "6 months",
+        "details": "Moderate monopole anomaly (112nT). Requires investigation to confirm UXO vs ferrous debris."
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {"type": "Point", "coordinates": [0.1566, 53.77530]},
+      "properties": {
+        "id": "BLD-001",
+        "hazard_type": "Boulder Field",
+        "name": "Boulder Field Alpha",
+        "size": "250m × 180m area, boulders 0.5-2.3m",
+        "detected_by": ["MBES", "SSS"],
+        "distance_to_turbine_m": 45,
+        "nearest_turbine": "T-12",
+        "risk": "Critical",
+        "risk_score": 8.7,
+        "action": "Boulder clearance or cable route alteration",
+        "cost": "£80,000 - £120,000",
+        "investigation_timeline": "3 months",
+        "expected_failure": "3 months",
+        "details": "Dense boulder field detected by MBES roughness (RMS 0.8m) and SSS high backscatter. 45+ boulders >0.5m diameter. Cable route crosses field."
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {"type": "Point", "coordinates": [0.1577, 53.77538]},
+      "properties": {
+        "id": "BLD-002",
+        "hazard_type": "Boulder",
+        "name": "Isolated Boulder",
+        "size": "3.2m × 2.8m × 1.5m",
+        "detected_by": ["MBES", "SSS"],
+        "distance_to_turbine_m": 312,
+        "nearest_turbine": "T-13",
+        "risk": "Medium",
+        "risk_score": 4.8,
+        "action": "Document and monitor",
+        "cost": "£5,000 - £10,000",
+        "investigation_timeline": "1 year",
+        "expected_failure": "N/A",
+        "details": "Large isolated glacial erratic. MBES shows 1.5m elevation. SSS shadow confirms dimensions."
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {"type": "Point", "coordinates": [0.1497, 53.77312]},
+      "properties": {
+        "id": "GAS-001",
+        "hazard_type": "Shallow Gas",
+        "name": "Gas Accumulation Zone",
+        "size": "450m × 320m × 2-8m depth",
+        "detected_by": ["SBP", "MBES"],
+        "distance_to_turbine_m": 234,
+        "nearest_turbine": "T-10",
+        "risk": "Critical",
+        "risk_score": 9.5,
+        "action": "Site abandonment or specialized foundation design",
+        "cost": "£500,000 - £2,000,000",
+        "investigation_timeline": "3 months",
+        "expected_failure": "3 months",
+        "details": "SBP shows extensive acoustic blanking below 2m depth with bright spots. MBES detects 15 pockmarks (5-20m diameter). Foundation blowout risk during piling."
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {"type": "Point", "coordinates": [0.1378, 53.77323]},
+      "properties": {
+        "id": "GAS-002",
+        "hazard_type": "Shallow Gas",
+        "name": "Localized Gas Pocket",
+        "size": "85m × 60m × 3-5m depth",
+        "detected_by": ["SBP"],
+        "distance_to_turbine_m": 456,
+        "nearest_turbine": "T-04",
+        "risk": "High",
+        "risk_score": 7.2,
+        "action": "Gas monitoring during construction",
+        "cost": "£50,000 - £150,000",
+        "investigation_timeline": "6 months",
+        "expected_failure": "6 months",
+        "details": "SBP acoustic turbidity at 3-5m depth. Localized gas pocket requires monitoring but does not preclude development."
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {"type": "Point", "coordinates": [0.1485, 53.77356]},
+      "properties": {
+        "id": "CHN-001",
+        "hazard_type": "Buried Channel",
+        "name": "Paleo-channel System",
+        "size": "1200m long × 150m wide × 8m deep",
+        "detected_by": ["SBP", "MBES"],
+        "distance_to_turbine_m": 178,
+        "nearest_turbine": "T-08",
+        "risk": "High",
+        "risk_score": 8.1,
+        "action": "HDD crossing or route alteration",
+        "cost": "£250,000 - £500,000",
+        "investigation_timeline": "6 months",
+        "expected_failure": "6 months",
+        "details": "SBP shows V-shaped buried channel, 8m deep with mobile sand infill. MBES shows subtle 0.4m depression. Cable crosses channel - HDD required."
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {"type": "Point", "coordinates": [0.1519, 53.77224]},
+      "properties": {
+        "id": "CHN-002",
+        "hazard_type": "Buried Channel",
+        "name": "Infilled Channel",
+        "size": "650m × 80m × 4m",
+        "detected_by": ["SBP"],
+        "distance_to_turbine_m": 523,
+        "nearest_turbine": "T-06",
+        "risk": "Medium",
+        "risk_score": 5.5,
+        "action": "Increased burial depth",
+        "cost": "£30,000 - £60,000",
+        "investigation_timeline": "1 year",
+        "expected_failure": "N/A",
+        "details": "SBP shows consolidated clay infill in shallow channel. Standard burial achievable with monitoring."
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {"type": "Point", "coordinates": [0.1440, 53.77483]},
+      "properties": {
+        "id": "SDW-001",
+        "hazard_type": "Sand Wave Field",
+        "name": "Active Sand Waves",
+        "size": "800m × 600m, amplitude 2.5m",
+        "detected_by": ["MBES", "SSS", "SBP"],
+        "distance_to_turbine_m": 267,
+        "nearest_turbine": "T-09",
+        "risk": "Critical",
+        "risk_score": 8.9,
+        "action": "HDD beneath mobile zone or increased burial + monitoring",
+        "cost": "£200,000 - £400,000",
+        "investigation_timeline": "3 months",
+        "expected_failure": "3 months",
+        "details": "MBES shows 2.5m amplitude asymmetric sand waves. SSS confirms mobile bedform texture. SBP indicates mobile sand to 5m depth. High migration risk."
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {"type": "Point", "coordinates": [0.1566, 53.77530]},
+      "properties": {
+        "id": "SDW-002",
+        "hazard_type": "Sand Wave Field",
+        "name": "Stable Sand Waves",
+        "size": "400m × 300m, amplitude 0.8m",
+        "detected_by": ["MBES", "SSS"],
+        "distance_to_turbine_m": 412,
+        "nearest_turbine": "T-12",
+        "risk": "Medium",
+        "risk_score": 4.2,
+        "action": "Standard burial + periodic monitoring",
+        "cost": "£15,000 - £30,000",
+        "investigation_timeline": "1 year",
+        "expected_failure": "N/A",
+        "details": "MBES amplitude <1m. Symmetric profiles suggest stable bedforms. SSS shows no active ripples."
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {"type": "Point", "coordinates": [0.1378, 53.77323]},
+      "properties": {
+        "id": "HRD-001",
+        "hazard_type": "Hard Ground",
+        "name": "Rock Outcrop",
+        "size": "320m × 240m area",
+        "detected_by": ["MBES", "SSS", "SBP"],
+        "distance_to_turbine_m": 98,
+        "nearest_turbine": "T-04",
+        "risk": "High",
+        "risk_score": 7.8,
+        "action": "HDD or rock cutting required",
+        "cost": "£150,000 - £300,000",
+        "investigation_timeline": "6 months",
+        "expected_failure": "6 months",
+        "details": "MBES shows high roughness. SSS very high backscatter (-8dB). SBP shows rock at <0.5m depth. Standard burial impossible."
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {"type": "Point", "coordinates": [0.1505, 53.77251]},
+      "properties": {
+        "id": "PIP-001",
+        "hazard_type": "Pipeline",
+        "name": "Existing Gas Pipeline",
+        "size": "0.9m diameter, 850m exposed length",
+        "detected_by": ["SSS", "MBES", "SBP"],
+        "distance_to_turbine_m": 445,
+        "nearest_turbine": "T-07",
+        "risk": "Critical",
+        "risk_score": 9.1,
+        "action": "Crossing agreement + HDD required",
+        "cost": "£100,000 - £200,000",
+        "investigation_timeline": "3 months",
+        "expected_failure": "3 months",
+        "details": "SSS shows linear 0.9m target. MBES confirms elevation 0.6m. SBP shows burial depth variable 0-2m. Operator liaison required for crossing."
+      }
+    }
+  ]
+}

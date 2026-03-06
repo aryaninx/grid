@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-app.py - Marine Survey Viewer with Interactive Risk Overlay
+THE GRID - Marine Survey Hazard Visualization Platform
+Demo version showcasing multi-sensor hazard detection visualization
 """
 
 import streamlit as st
@@ -21,32 +22,27 @@ import matplotlib
 matplotlib.use('Agg')
 from matplotlib.cm import get_cmap
 import pandas as pd
-from shapely.geometry import Point, LineString
 from datetime import datetime
-from math import radians, cos, sin, asin, sqrt
 
-st.set_page_config(page_title="Marine Risk Viewer", layout="wide", page_icon="⚠️")
+st.set_page_config(page_title="The Grid - Marine Risk Viewer", layout="wide", page_icon="⚠️")
 
 # Session state
 if 'raster_layers' not in st.session_state:
     st.session_state.raster_layers = []
 if 'vector_layers' not in st.session_state:
     st.session_state.vector_layers = []
-if 'all_hazards' not in st.session_state:
-    st.session_state.all_hazards = []
-if 'cable_route' not in st.session_state:
-    st.session_state.cable_route = None
+if 'hazards' not in st.session_state:
+    st.session_state.hazards = []
+if 'turbines' not in st.session_state:
+    st.session_state.turbines = []
+if 'sbp_lines' not in st.session_state:
+    st.session_state.sbp_lines = []
+if 'mag_tif_layer' not in st.session_state:
+    st.session_state.mag_tif_layer = None
 
-st.title("⚠️ Marine Survey Risk Assessment")
+st.title("⚠️ The Grid - Marine Hazard Visualization")
 
-# MODE SELECTION
-st.sidebar.header("🎛️ View Mode")
-view_mode = st.sidebar.radio(
-    "Select View:",
-    ["📊 Survey Data View", "⚠️ Risk Overlay View"],
-    help="Survey view shows raw data. Risk overlay filters by risk level."
-)
-
+# Sidebar
 st.sidebar.header("📁 Data Loading")
 
 quality_preset = st.sidebar.radio(
@@ -63,7 +59,7 @@ quality_map = {
 }
 max_pixels = quality_map[quality_preset]
 
-st.sidebar.header("🎨 Display")
+st.sidebar.header("🎨 Display Settings")
 basemap = st.sidebar.selectbox("Basemap", ['OpenStreetMap', 'Esri Satellite'], index=0)
 mbes_colormap = st.sidebar.selectbox("MBES/Mag Colormap", ['ocean', 'viridis', 'seismic'], index=0)
 
@@ -83,12 +79,9 @@ def download_from_gdrive(file_id, output_path):
 
 @st.cache_data(show_spinner=False)
 def tif_to_png_base64(file_path, colormap='gray', max_size=500, is_sss=False, is_mag=False):
-    """Convert GeoTIFF to base64 PNG with better error handling."""
     try:
-        # Try to open with rasterio
         with rasterio.open(file_path) as src:
             orig_h, orig_w = src.height, src.width
-            
             if max_size >= 10000:
                 downsample = 1
                 out_h, out_w = orig_h, orig_w
@@ -97,7 +90,6 @@ def tif_to_png_base64(file_path, colormap='gray', max_size=500, is_sss=False, is
                 out_h = orig_h // downsample
                 out_w = orig_w // downsample
             
-            # Read data
             if src.count >= 3:
                 data = np.zeros((out_h, out_w, 3), dtype=np.float32)
                 for i in range(3):
@@ -111,11 +103,9 @@ def tif_to_png_base64(file_path, colormap='gray', max_size=500, is_sss=False, is
                 data = data.astype(np.float32)
                 is_rgb = False
             
-            # Transform bounds
             try:
                 bounds_wgs84 = transform_bounds(src.crs, 'EPSG:4326', *src.bounds)
-            except Exception as e:
-                st.warning(f"CRS transformation issue: {e}. Assuming WGS84.")
+            except:
                 bounds_wgs84 = src.bounds
             
             nodata = src.nodata
@@ -179,75 +169,40 @@ def tif_to_png_base64(file_path, colormap='gray', max_size=500, is_sss=False, is
             
             return img_base64, bounds_wgs84
             
-    except rasterio.errors.RasterioIOError as e:
-        st.error(f"❌ Not a valid GeoTIFF: {e}")
-        st.info("💡 Tip: Use GDAL to convert: gdal_translate -of GTiff input.tif output.tif")
-        return None, None
     except Exception as e:
-        st.error(f"❌ Error processing file: {str(e)}")
-        import traceback
-        st.code(traceback.format_exc())
+        st.error(f"Error: {str(e)}")
         return None, None
 
 
-def calculate_distance(lat1, lon1, lat2, lon2):
-    """Haversine distance in meters."""
-    lon1, lat1, lon2, lat2 = map(radians, [lon1, lat1, lon2, lat2])
-    dlon = lon2 - lon1
-    dlat = lat2 - lat1
-    a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
-    c = 2 * asin(sqrt(a))
-    return c * 6371000
+def get_hazard_icon(hazard_type):
+    icons = {
+        'Wreck': 'ship',
+        'UXO': 'exclamation-triangle',
+        'Boulder': 'circle',
+        'Boulder Field': 'circle',
+        'Shallow Gas': 'cloud',
+        'Buried Channel': 'water',
+        'Sand Wave Field': 'water',
+        'Hard Ground': 'square',
+        'Pipeline': 'minus'
+    }
+    return icons.get(hazard_type, 'info-sign')
 
 
-def classify_risk(magnitude, distance_to_cable, feature_type="mag"):
-    """Classify risk level."""
-    if feature_type == "mag":
-        if magnitude > 50 and distance_to_cable < 50:
-            return "Critical"
-        elif magnitude > 50 or distance_to_cable < 50:
-            return "High"
-        elif magnitude > 20 or distance_to_cable < 100:
-            return "Medium"
-        else:
-            return "Low"
-    return "Low"
+def get_risk_color(risk):
+    colors = {
+        'Critical': '#DC143C',
+        'High': '#FF8C00',
+        'Medium': '#FFD700',
+        'Low': '#90EE90'
+    }
+    return colors.get(risk, '#808080')
 
 
-def estimate_cost(risk, magnitude, feature_type="mag"):
-    """Estimate cost range."""
-    if risk == "Critical":
-        if magnitude > 100:
-            return "£100,000 - £200,000"
-        else:
-            return "£50,000 - £75,000"
-    elif risk == "High":
-        return "£20,000 - £40,000"
-    elif risk == "Medium":
-        return "£5,000 - £15,000"
-    else:
-        return "£1,000 - £5,000"
-
-
-def recommend_action(risk, magnitude, distance, feature_type="mag"):
-    """Recommend action."""
-    if risk == "Critical":
-        if magnitude > 100:
-            return "UXO clearance required"
-        else:
-            return "Immediate clearance or route alteration"
-    elif risk == "High":
-        return "ROV survey + likely clearance"
-    elif risk == "Medium":
-        return "ROV investigation"
-    else:
-        return "Monitor during installation"
-
-
-def create_map(raster_layers, vector_layers, hazards, cable_route, basemap_choice, risk_filter=None):
-    """Create map with optional risk filtering."""
-    all_bounds = [b for _, b in raster_layers if b]
+def create_map(raster_layers, vector_layers, hazards, turbines, sbp_lines, mag_tif, basemap_choice,
+               show_sbp=True, show_mag_tif=True):
     
+    all_bounds = [b for _, b in raster_layers if b]
     if all_bounds:
         min_lon = min(b[0] for b in all_bounds)
         min_lat = min(b[1] for b in all_bounds)
@@ -265,7 +220,7 @@ def create_map(raster_layers, vector_layers, hazards, cable_route, basemap_choic
     else:
         m = folium.Map(location=[center_lat, center_lon], zoom_start=13, tiles='OpenStreetMap')
     
-    # Add rasters
+    # Add rasters (SSS/MBES)
     for i, (img_base64, bounds) in enumerate(raster_layers):
         if img_base64 and bounds:
             img_url = f"data:image/png;base64,{img_base64}"
@@ -274,111 +229,142 @@ def create_map(raster_layers, vector_layers, hazards, cable_route, basemap_choic
                 bounds=[[bounds[1], bounds[0]], [bounds[3], bounds[2]]],
                 opacity=0.85,
                 interactive=True,
-                name=f"Raster {i+1}"
+                name=f"Survey Data {i+1}"
+            ).add_to(m)
+    
+    # Add Mag TIF (if loaded and toggle on)
+    if show_mag_tif and mag_tif:
+        img_base64, bounds = mag_tif
+        if img_base64 and bounds:
+            img_url = f"data:image/png;base64,{img_base64}"
+            folium.raster_layers.ImageOverlay(
+                image=img_url,
+                bounds=[[bounds[1], bounds[0]], [bounds[3], bounds[2]]],
+                opacity=0.6,
+                interactive=True,
+                name="Magnetometer TIF"
             ).add_to(m)
     
     # Add vectors
     for gdf, color, name in vector_layers:
         if gdf is not None:
-            gdf_wgs84 = gdf.to_crs('EPSG:4326') if gdf.crs and str(gdf.crs) != 'EPSG:4326' else gdf
-            folium.GeoJson(gdf_wgs84, name=name,
-                         style_function=lambda x, c=color: {'color': c, 'weight': 2}).add_to(m)
+            try:
+                gdf_wgs84 = gdf.to_crs('EPSG:4326') if gdf.crs and str(gdf.crs) != 'EPSG:4326' else gdf
+                folium.GeoJson(gdf_wgs84, name=name,
+                             style_function=lambda x, c=color: {'color': c, 'weight': 2}).add_to(m)
+            except:
+                pass
     
-    # Add cable route
-    if cable_route:
-        folium.PolyLine(cable_route, color='blue', weight=3, opacity=0.8, popup='Cable Route').add_to(m)
+    # Add SBP lines (if toggle on)
+    if show_sbp and sbp_lines:
+        try:
+            gdf_sbp = sbp_lines.to_crs('EPSG:4326') if sbp_lines.crs else sbp_lines
+            folium.GeoJson(
+                gdf_sbp,
+                name="SBP Survey Lines",
+                style_function=lambda x: {
+                    'color': '#00FFFF',
+                    'weight': 2,
+                    'opacity': 0.7
+                },
+                tooltip=folium.GeoJsonTooltip(fields=['line_name'], aliases=['Line:'])
+            ).add_to(m)
+        except:
+            pass
     
-    # Filter hazards by risk level
-    if risk_filter:
-        filtered_hazards = [h for h in hazards if h['risk'] in risk_filter]
-    else:
-        filtered_hazards = hazards
+    # Add turbines
+    if turbines:
+        try:
+            gdf_turb = turbines.to_crs('EPSG:4326') if turbines.crs else turbines
+            for idx, row in gdf_turb.iterrows():
+                folium.CircleMarker(
+                    location=[row.geometry.y, row.geometry.x],
+                    radius=8,
+                    color='#4169E1',
+                    fill=True,
+                    fillColor='#4169E1',
+                    fillOpacity=0.8,
+                    popup=f"<b>{row['name']}</b><br>Status: {row.get('status', 'Unknown')}",
+                    tooltip=row['name']
+                ).add_to(m)
+        except:
+            pass
     
-    # Add hazard markers with detailed popups
-    for hazard in filtered_hazards:
-        risk = hazard['risk']
-        magnitude = hazard.get('magnitude', 0)
-        distance = hazard.get('distance_to_cable', 999)
-        
-        # Color by risk
-        if risk == "Critical":
-            color = 'red'
-        elif risk == "High":
-            color = 'orange'
-        elif risk == "Medium":
-            color = 'yellow'
-        else:
-            color = 'green'
-        
-        # Detailed popup with ALL information
-        popup_html = f"""
-        <div style="width:300px; font-family: Arial;">
-            <h3 style="margin:0; color:{color}; border-bottom:2px solid {color}; padding-bottom:5px;">
-                {hazard.get('type', 'Mag Anomaly')} - {hazard.get('id', 'N/A')}
-            </h3>
-            
-            <div style="margin-top:10px;">
-                <h4 style="margin:5px 0; color:#333;">📊 Classification</h4>
-                <p style="margin:5px 0;"><b>Risk Level:</b> <span style="color:{color}; font-weight:bold;">{risk}</span></p>
-                <p style="margin:5px 0;"><b>Magnitude:</b> {magnitude:.1f} nT</p>
-                <p style="margin:5px 0;"><b>Distance to Cable:</b> {distance:.0f}m</p>
-            </div>
-            
-            <div style="margin-top:10px; background:#f0f0f0; padding:8px; border-radius:4px;">
-                <h4 style="margin:5px 0; color:#333;">🎯 Recommended Action</h4>
-                <p style="margin:5px 0;">{hazard.get('action', 'Monitor')}</p>
-            </div>
-            
-            <div style="margin-top:10px; background:#fff3cd; padding:8px; border-radius:4px;">
-                <h4 style="margin:5px 0; color:#333;">💰 Estimated Cost</h4>
-                <p style="margin:5px 0; font-weight:bold;">{hazard.get('cost', 'TBD')}</p>
-            </div>
-            
-            <div style="margin-top:10px; font-size:11px; color:#666;">
-                <p style="margin:2px 0;">Lat: {hazard['lat']:.6f}</p>
-                <p style="margin:2px 0;">Lon: {hazard['lon']:.6f}</p>
-            </div>
-        </div>
-        """
-        
-        # Tooltip on hover - summary info
-        tooltip_text = f"""
-        <div style="font-family:Arial; padding:5px;">
-            <b>{hazard.get('type', 'Mag Anomaly')}</b><br>
-            Risk: <b style="color:{color}">{risk}</b><br>
-            {magnitude:.1f} nT | {distance:.0f}m from cable<br>
-            <i>{hazard.get('action', 'Monitor')}</i><br>
-            <b>{hazard.get('cost', 'TBD')}</b>
-        </div>
-        """
-        
-        folium.CircleMarker(
-            location=[hazard['lat'], hazard['lon']],
-            radius=8 if risk in ["Critical", "High"] else 5,
-            color=color,
-            fill=True,
-            fillColor=color,
-            fillOpacity=0.7,
-            popup=folium.Popup(popup_html, max_width=320),
-            tooltip=folium.Tooltip(tooltip_text)
-        ).add_to(m)
-    
-    # Add legend
-    legend_html = f"""
-    <div style="position: fixed; bottom: 50px; right: 50px; width: 200px; 
-                background-color: white; z-index:9999; border:2px solid grey; 
-                border-radius: 5px; padding: 10px; box-shadow: 2px 2px 6px rgba(0,0,0,0.3);">
-        <h4 style="margin:0 0 10px 0;">Risk Legend</h4>
-        <p style="margin:5px 0;"><span style="color:#DC143C; font-size:20px;">●</span> Critical</p>
-        <p style="margin:5px 0;"><span style="color:#FF8C00; font-size:20px;">●</span> High</p>
-        <p style="margin:5px 0;"><span style="color:#FFD700; font-size:20px;">●</span> Medium</p>
-        <p style="margin:5px 0;"><span style="color:#32CD32; font-size:20px;">●</span> Low</p>
-        <hr style="margin:10px 0;">
-        <p style="margin:5px 0; font-size:12px;"><b>Showing:</b> {len(filtered_hazards)} hazards</p>
-        <p style="margin:5px 0; font-size:11px; color:#666;"><i>Hover for details<br>Click for full info</i></p>
-    </div>
-    """
-    m.get_root().html.add_child(folium.Element(legend_html))
+    # Add hazards with detailed popups
+    if hazards:
+        try:
+            gdf_haz = hazards.to_crs('EPSG:4326') if hazards.crs else hazards
+            for idx, row in gdf_haz.iterrows():
+                risk = row.get('risk', 'Unknown')
+                hazard_type = row.get('hazard_type', 'Unknown')
+                
+                # Build detailed popup
+                sensors_list = ', '.join(row.get('detected_by', []))
+                
+                popup_html = f"""
+                <div style="width:320px; font-family:Arial;">
+                    <h3 style="margin:0; color:{get_risk_color(risk)}; border-bottom:2px solid {get_risk_color(risk)}; padding-bottom:5px;">
+                        {hazard_type} - {row.get('id', '')}
+                    </h3>
+                    
+                    <div style="margin-top:10px;">
+                        <p style="margin:5px 0;"><b>Name:</b> {row.get('name', 'N/A')}</p>
+                        <p style="margin:5px 0;"><b>Size:</b> {row.get('size', 'N/A')}</p>
+                    </div>
+                    
+                    <div style="margin-top:10px; background:#f0f0f0; padding:8px; border-radius:4px;">
+                        <h4 style="margin:5px 0; color:#333;">📡 Detected By:</h4>
+                        <p style="margin:5px 0;">{sensors_list}</p>
+                    </div>
+                    
+                    <div style="margin-top:10px;">
+                        <p style="margin:5px 0;"><b>Distance to Turbine:</b> {row.get('distance_to_turbine_m', 'N/A')}m</p>
+                        <p style="margin:5px 0;"><b>Nearest:</b> {row.get('nearest_turbine', 'N/A')}</p>
+                    </div>
+                    
+                    <div style="margin-top:10px; background:#fff3cd; padding:8px; border-radius:4px;">
+                        <h4 style="margin:5px 0; color:#333;">⚠️ Risk Assessment</h4>
+                        <p style="margin:5px 0;"><b>Level:</b> <span style="color:{get_risk_color(risk)}; font-weight:bold;">{risk}</span></p>
+                        <p style="margin:5px 0;"><b>Score:</b> {row.get('risk_score', 'N/A')}/10</p>
+                    </div>
+                    
+                    <div style="margin-top:10px; background:#f0f0f0; padding:8px; border-radius:4px;">
+                        <h4 style="margin:5px 0; color:#333;">🎯 Action Required</h4>
+                        <p style="margin:5px 0;">{row.get('action', 'N/A')}</p>
+                    </div>
+                    
+                    <div style="margin-top:10px; background:#d4edda; padding:8px; border-radius:4px;">
+                        <h4 style="margin:5px 0; color:#333;">💰 Estimated Cost</h4>
+                        <p style="margin:5px 0; font-weight:bold;">{row.get('cost', 'N/A')}</p>
+                    </div>
+                    
+                    <div style="margin-top:10px; background:#d1ecf1; padding:8px; border-radius:4px;">
+                        <h4 style="margin:5px 0; color:#333;">📅 Timeline</h4>
+                        <p style="margin:5px 0;"><b>Investigation:</b> {row.get('investigation_timeline', 'N/A')}</p>
+                        <p style="margin:5px 0;"><b>Expected Failure:</b> {row.get('expected_failure', 'N/A')}</p>
+                    </div>
+                    
+                    <div style="margin-top:10px; font-size:11px; color:#666; border-top:1px solid #ddd; padding-top:5px;">
+                        <p style="margin:2px 0;"><b>Details:</b> {row.get('details', 'N/A')}</p>
+                    </div>
+                </div>
+                """
+                
+                # Tooltip (hover)
+                tooltip_text = f"""<b>{hazard_type}</b><br>{row.get('name', '')}<br>Risk: {risk}<br>{row.get('distance_to_turbine_m', 'N/A')}m to {row.get('nearest_turbine', '')}"""
+                
+                folium.Marker(
+                    location=[row.geometry.y, row.geometry.x],
+                    popup=folium.Popup(popup_html, max_width=340),
+                    tooltip=folium.Tooltip(tooltip_text),
+                    icon=folium.Icon(
+                        color='red' if risk == 'Critical' else 'orange' if risk == 'High' else 'beige',
+                        icon=get_hazard_icon(hazard_type),
+                        prefix='fa'
+                    )
+                ).add_to(m)
+        except Exception as e:
+            st.warning(f"Error adding hazards to map: {e}")
     
     folium.plugins.Fullscreen().add_to(m)
     folium.plugins.MousePosition().add_to(m)
@@ -388,18 +374,19 @@ def create_map(raster_layers, vector_layers, hazards, cable_route, basemap_choic
     return m
 
 
+# ==============================================================================
 # DATA LOADING
-st.sidebar.subheader("📡 Sidescan (SSS)")
+# ==============================================================================
+
+st.sidebar.subheader("📡 SSS Data")
 sss_ids = st.sidebar.text_area("SSS File IDs", height=80)
 
 if sss_ids and st.sidebar.button("🚀 Load SSS"):
     sss_id_list = [fid.strip() for fid in sss_ids.strip().split('\n') if fid.strip()]
-    
     with st.container():
         st.info(f"Loading {len(sss_id_list)} SSS tiles...")
         progress_bar = st.progress(0)
         status_text = st.empty()
-        
         success_count = 0
         for i, file_id in enumerate(sss_id_list):
             try:
@@ -413,15 +400,14 @@ if sss_ids and st.sidebar.button("🚀 Load SSS"):
                         success_count += 1
                     os.unlink(tmp.name)
                 progress_bar.progress((i + 1) / len(sss_id_list))
-            except Exception as e:
-                status_text.warning(f"Tile {i+1} failed")
-        
+            except:
+                pass
         progress_bar.empty()
         status_text.empty()
         st.success(f"✅ {success_count}/{len(sss_id_list)} SSS tiles loaded!")
 
 # MBES
-st.sidebar.subheader("🗺️ MBES")
+st.sidebar.subheader("🗺️ MBES Data")
 mbes_ids = st.sidebar.text_area("MBES File IDs", height=40)
 
 if mbes_ids and st.sidebar.button("Load MBES"):
@@ -432,202 +418,234 @@ if mbes_ids and st.sidebar.button("Load MBES"):
                 img, bounds = tif_to_png_base64(tmp.name, colormap=mbes_colormap, max_size=max_pixels)
                 if img and bounds:
                     st.session_state.raster_layers.append((img, bounds))
-                    st.success("✅ MBES loaded!")
                 os.unlink(tmp.name)
-            except Exception as e:
-                st.error(f"Failed to load MBES")
+            except:
+                pass
+    st.success("✅ MBES loaded!")
 
-# Cable Route
-st.sidebar.subheader("🔌 Cable Route")
-cable_id = st.sidebar.text_input("Cable GeoJSON File ID")
+# Mag TIF
+st.sidebar.subheader("🧲 Magnetometer TIF")
+mag_tif_id = st.sidebar.text_input("Mag TIF File ID")
 
-if cable_id and st.sidebar.button("Load Cable"):
-    with tempfile.NamedTemporaryFile(delete=False, suffix='.geojson') as tmp:
+if mag_tif_id and st.sidebar.button("Load Mag TIF"):
+    with tempfile.NamedTemporaryFile(delete=False, suffix='.tif') as tmp:
         try:
-            download_from_gdrive(cable_id, tmp.name)
-            gdf = gpd.read_file(tmp.name)
-            gdf_wgs84 = gdf.to_crs('EPSG:4326') if gdf.crs else gdf
-            
-            coords = []
-            for geom in gdf_wgs84.geometry:
-                if geom.geom_type == 'LineString':
-                    coords = [(lat, lon) for lon, lat in geom.coords]
-                elif geom.geom_type == 'MultiLineString':
-                    for line in geom.geoms:
-                        coords.extend([(lat, lon) for lon, lat in line.coords])
-            
-            st.session_state.cable_route = coords
-            st.session_state.vector_layers.append((gdf_wgs84, 'blue', 'Cable'))
-            st.success(f"✅ Cable route loaded!")
+            st.info("Loading magnetometer data...")
+            download_from_gdrive(mag_tif_id, tmp.name)
+            img, bounds = tif_to_png_base64(tmp.name, colormap='seismic',
+                                           max_size=max_pixels, is_mag=True)
+            if img and bounds:
+                st.session_state.mag_tif_layer = (img, bounds)
+                st.success("✅ Mag TIF loaded!")
             os.unlink(tmp.name)
         except Exception as e:
-            st.error(f"Error: {e}")
+            st.error(f"Failed: {e}")
 
-# Mag CSV - Process into hazards
-st.sidebar.subheader("🎯 Mag Targets CSV")
-mag_csv_file = st.sidebar.file_uploader("Upload Mag CSV", type=['csv'])
+# SBP Lines
+st.sidebar.subheader("🔊 SBP Survey Lines")
+sbp_file = st.sidebar.file_uploader("Upload SBP Lines (GeoJSON)", type=['geojson', 'json'])
 
-if mag_csv_file is not None:
+if sbp_file:
     try:
-        df = pd.read_csv(mag_csv_file)
-        
-        if 'Latitude' in df.columns and 'Longitude' in df.columns:
-            lat_col, lon_col = 'Latitude', 'Longitude'
-        else:
-            lat_col = lon_col = None
-            for col in df.columns:
-                col_lower = col.lower()
-                if 'lat' in col_lower and lat_col is None:
-                    lat_col = col
-                if 'lon' in col_lower and lon_col is None:
-                    lon_col = col
-        
-        mag_col = None
-        for col in df.columns:
-            if 'nt' in col.lower() or 'mag' in col.lower():
-                mag_col = col
-                break
-        
-        if lat_col and lon_col and mag_col:
-            mag_threshold = st.sidebar.slider("Min Magnitude (nT)", 0, int(df[mag_col].max()), 5)
-            df_filtered = df[df[mag_col] > mag_threshold]
-            
-            st.sidebar.info(f"Processing {len(df_filtered)} targets...")
-            
-            # Process all hazards
-            st.session_state.all_hazards = []
-            
-            for idx, row in df_filtered.iterrows():
-                lat = row[lat_col]
-                lon = row[lon_col]
-                magnitude = row[mag_col]
-                
-                if st.session_state.cable_route:
-                    min_distance = min(
-                        calculate_distance(lat, lon, cable_lat, cable_lon)
-                        for cable_lat, cable_lon in st.session_state.cable_route
-                    )
-                else:
-                    min_distance = 999
-                
-                risk = classify_risk(magnitude, min_distance)
-                action = recommend_action(risk, magnitude, min_distance)
-                cost = estimate_cost(risk, magnitude)
-                
-                st.session_state.all_hazards.append({
-                    'id': f"MAG-{idx+1:03d}",
-                    'type': 'Mag Anomaly',
-                    'lat': lat,
-                    'lon': lon,
-                    'magnitude': magnitude,
-                    'distance_to_cable': min_distance,
-                    'risk': risk,
-                    'action': action,
-                    'cost': cost
-                })
-            
-            st.sidebar.success(f"✅ {len(st.session_state.all_hazards)} hazards processed!")
-            
+        st.session_state.sbp_lines = gpd.read_file(sbp_file)
+        st.sidebar.success(f"✅ Loaded {len(st.session_state.sbp_lines)} SBP lines")
+    except Exception as e:
+        st.sidebar.error(f"Error: {e}")
+
+# Turbines
+st.sidebar.subheader("🔌 Turbines")
+turbine_file = st.sidebar.file_uploader("Upload Turbines (GeoJSON)", type=['geojson', 'json'])
+
+if turbine_file:
+    try:
+        st.session_state.turbines = gpd.read_file(turbine_file)
+        st.sidebar.success(f"✅ Loaded {len(st.session_state.turbines)} turbines")
+    except Exception as e:
+        st.sidebar.error(f"Error: {e}")
+
+# Hazards
+st.sidebar.subheader("⚠️ Hazards")
+hazard_file = st.sidebar.file_uploader("Upload Hazards (GeoJSON)", type=['geojson', 'json'])
+
+if hazard_file:
+    try:
+        st.session_state.hazards = gpd.read_file(hazard_file)
+        st.sidebar.success(f"✅ Loaded {len(st.session_state.hazards)} hazards")
     except Exception as e:
         st.sidebar.error(f"Error: {e}")
 
 if st.sidebar.button("🗑️ Clear All"):
     st.session_state.raster_layers = []
     st.session_state.vector_layers = []
-    st.session_state.all_hazards = []
-    st.session_state.cable_route = None
+    st.session_state.hazards = []
+    st.session_state.turbines = []
+    st.session_state.sbp_lines = []
+    st.session_state.mag_tif_layer = None
     st.success("Cleared!")
     st.rerun()
 
-# RISK OVERLAY MODE
-if view_mode == "⚠️ Risk Overlay View":
+# ==============================================================================
+# HAZARD FILTERS
+# ==============================================================================
+
+if not st.session_state.hazards.empty if isinstance(st.session_state.hazards, gpd.GeoDataFrame) else len(st.session_state.hazards) > 0:
     st.sidebar.markdown("---")
-    st.sidebar.subheader("⚠️ Risk Filter")
+    st.sidebar.subheader("🔍 Hazard Filters")
     
-    risk_filter = st.sidebar.multiselect(
-        "Show Risk Levels:",
-        ["Critical", "High", "Medium", "Low"],
-        default=["Critical", "High"],
-        help="Select which risk levels to display on the map"
+    # Get unique hazard types
+    hazard_types = sorted(st.session_state.hazards['hazard_type'].unique().tolist())
+    
+    selected_hazards = st.sidebar.multiselect(
+        "Show Hazard Types:",
+        hazard_types,
+        default=hazard_types,
+        help="Select which hazard types to display"
     )
     
-    # Summary
-    if st.session_state.all_hazards:
-        filtered = [h for h in st.session_state.all_hazards if h['risk'] in risk_filter]
+    # Risk filter
+    selected_risks = st.sidebar.multiselect(
+        "Show Risk Levels:",
+        ["Critical", "High", "Medium", "Low"],
+        default=["Critical", "High", "Medium", "Low"]
+    )
+    
+    # Timeline filter
+    st.sidebar.markdown("### 📅 Investigation Timeline")
+    
+    selected_timelines = st.sidebar.multiselect(
+        "Show by Timeline:",
+        ["3 months", "6 months", "1 year", "5 years", "All"],
+        default=["All"]
+    )
+    
+    # Expected failure filter
+    st.sidebar.markdown("### ⏰ Expected Time to Failure")
+    
+    selected_failures = st.sidebar.multiselect(
+        "Show by Failure Timeline:",
+        ["3 months", "6 months", "N/A", "All"],
+        default=["All"]
+    )
+    
+    # Toggle layers
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("👁️ Layer Toggles")
+    show_sbp = st.sidebar.checkbox("Show SBP Lines", value=True)
+    show_mag_tif = st.sidebar.checkbox("Show Magnetometer TIF", value=True)
+    
+    # Filter hazards
+    filtered_hazards = st.session_state.hazards.copy()
+    
+    # Apply filters
+    if selected_hazards:
+        filtered_hazards = filtered_hazards[filtered_hazards['hazard_type'].isin(selected_hazards)]
+    
+    if selected_risks:
+        filtered_hazards = filtered_hazards[filtered_hazards['risk'].isin(selected_risks)]
+    
+    if "All" not in selected_timelines:
+        filtered_hazards = filtered_hazards[filtered_hazards['investigation_timeline'].isin(selected_timelines)]
+    
+    if "All" not in selected_failures:
+        filtered_hazards = filtered_hazards[filtered_hazards['expected_failure'].isin(selected_failures)]
+    
+    # Summary metrics
+    st.subheader("📊 Hazard Summary")
+    
+    col1, col2, col3, col4, col5 = st.columns(5)
+    
+    with col1:
+        critical = len(filtered_hazards[filtered_hazards['risk'] == 'Critical'])
+        st.metric("🔴 Critical", critical)
+    
+    with col2:
+        high = len(filtered_hazards[filtered_hazards['risk'] == 'High'])
+        st.metric("🟠 High", high)
+    
+    with col3:
+        medium = len(filtered_hazards[filtered_hazards['risk'] == 'Medium'])
+        st.metric("🟡 Medium", medium)
+    
+    with col4:
+        low = len(filtered_hazards[filtered_hazards['risk'] == 'Low'])
+        st.metric("🟢 Low", low)
+    
+    with col5:
+        st.metric("📍 Total Shown", len(filtered_hazards))
+    
+    # Map
+    st.subheader("🗺️ Interactive Hazard Map")
+    st.info("💡 **Click** markers for detailed info | **Hover** for quick summary")
+    
+    m = create_map(
+        st.session_state.raster_layers,
+        st.session_state.vector_layers,
+        filtered_hazards,
+        st.session_state.turbines,
+        st.session_state.sbp_lines,
+        st.session_state.mag_tif_layer,
+        basemap,
+        show_sbp=show_sbp,
+        show_mag_tif=show_mag_tif
+    )
+    st_folium(m, width=1400, height=700)
+    
+    # Hazard table
+    if len(filtered_hazards) > 0:
+        st.subheader("📋 Hazard Register")
         
-        st.subheader(f"📊 Risk Summary - Showing {risk_filter}")
+        display_cols = ['id', 'hazard_type', 'risk', 'distance_to_turbine_m', 
+                       'investigation_timeline', 'expected_failure', 'action', 'cost']
         
-        col1, col2, col3, col4, col5 = st.columns(5)
+        df_display = filtered_hazards[display_cols].copy()
+        st.dataframe(df_display, use_container_width=True, height=400)
         
-        with col1:
-            critical = sum(1 for h in filtered if h['risk'] == 'Critical')
-            st.metric("🔴 Critical", critical)
+        # Export
+        csv = filtered_hazards.to_csv(index=False)
+        st.download_button(
+            "📥 Download Hazard Register (CSV)",
+            csv,
+            f"hazard_register_{datetime.now().strftime('%Y%m%d')}.csv",
+            "text/csv"
+        )
         
-        with col2:
-            high = sum(1 for h in filtered if h['risk'] == 'High')
-            st.metric("🟠 High", high)
-        
-        with col3:
-            medium = sum(1 for h in filtered if h['risk'] == 'Medium')
-            st.metric("🟡 Medium", medium)
-        
-        with col4:
-            low = sum(1 for h in filtered if h['risk'] == 'Low')
-            st.metric("🟢 Low", low)
-        
-        with col5:
-            total_cost = 0
-            for h in filtered:
-                cost_str = h['cost'].replace('£', '').replace(',', '')
-                if '-' in cost_str:
-                    min_cost = int(cost_str.split('-')[0].strip())
-                    total_cost += min_cost
-            st.metric("💰 Min Cost", f"£{total_cost:,}")
-        
-        st.subheader("🗺️ Risk Overlay Map")
-        st.info("💡 **Hover** over markers for quick info | **Click** for detailed breakdown")
-        
-        m = create_map(st.session_state.raster_layers, st.session_state.vector_layers,
-                      st.session_state.all_hazards, st.session_state.cable_route, basemap, risk_filter)
-        st_folium(m, width=1400, height=700)
-        
-        # Summary tables
+        # Breakdown
         col1, col2 = st.columns(2)
         
         with col1:
-            st.markdown("### 🎯 Actions Required")
-            df_filtered = pd.DataFrame(filtered)
-            actions = df_filtered.groupby('action').size().reset_index(name='count')
-            for _, row in actions.iterrows():
-                st.write(f"• **{row['action']}**: {row['count']} items")
+            st.markdown("### By Hazard Type")
+            type_counts = filtered_hazards['hazard_type'].value_counts()
+            for htype, count in type_counts.items():
+                st.write(f"• **{htype}**: {count}")
         
         with col2:
-            st.markdown("### 💰 Cost Breakdown")
-            for risk in ["Critical", "High", "Medium", "Low"]:
-                risk_items = [h for h in filtered if h['risk'] == risk]
-                if risk_items:
-                    costs = []
-                    for h in risk_items:
-                        cost_str = h['cost'].replace('£', '').replace(',', '')
-                        if '-' in cost_str:
-                            costs.append(int(cost_str.split('-')[0].strip()))
-                    st.write(f"• **{risk}**: £{sum(costs):,} ({len(risk_items)} items)")
-    else:
-        st.info("Load mag targets CSV to enable risk overlay mode")
+            st.markdown("### By Investigation Timeline")
+            timeline_counts = filtered_hazards['investigation_timeline'].value_counts()
+            for timeline, count in timeline_counts.items():
+                st.write(f"• **{timeline}**: {count} hazards")
 
-# SURVEY DATA MODE
 else:
-    if st.session_state.raster_layers or st.session_state.all_hazards:
-        st.subheader("🗺️ Survey Data Map")
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            st.metric("Rasters", len(st.session_state.raster_layers))
-        with col2:
-            st.metric("Hazards", len(st.session_state.all_hazards))
-        
-        m = create_map(st.session_state.raster_layers, st.session_state.vector_layers,
-                      st.session_state.all_hazards, st.session_state.cable_route, basemap)
-        st_folium(m, width=1400, height=700)
-    else:
-        st.info("👆 Load survey data to begin")
+    st.info("👆 Upload hazard GeoJSON file to begin visualization")
+    
+    st.markdown("""
+    ## 🎯 The Grid - Demo Instructions
+    
+    ### Step 1: Load Survey Data
+    - **SSS tiles**: Background imagery
+    - **MBES**: Bathymetry
+    - **Mag TIF**: Magnetometer heatmap
+    
+    ### Step 2: Load Infrastructure
+    - **Turbines GeoJSON**: Wind turbine locations
+    - **SBP Lines GeoJSON**: Survey line coverage
+    
+    ### Step 3: Load Hazards
+    - **Hazards GeoJSON**: All detected hazards
+    - Filter by type, risk, timeline
+    - Click markers for detailed popups
+    
+    ### Demo Files Available:
+    - `demo_hazards_all.geojson` - 14 sample hazards
+    - `demo_turbines.geojson` - 9 turbine locations  
+    - `demo_sbp_lines.geojson` - 6 survey lines
+    """)
