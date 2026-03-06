@@ -43,6 +43,194 @@ if 'mag_tif_layer' not in st.session_state:
 st.title("⚠️ The Grid - Marine Hazard Visualization")
 
 # Sidebar
+# ==============================================================================
+# PRE-CONFIGURED GOOGLE DRIVE FILE IDs
+# ==============================================================================
+# Update these with your actual Google Drive File IDs
+PRECONFIGURED_FILES = {
+    'sss_tiles': ['1-fd4WYSO3jAurneJNV_QzMJVx3F5rojM',
+'1reqiNT6_XKdFc4LzjAM634CRe3qqReZP',
+'1MmJAYU9O6bjqst0ufZW5s_7DZQirSr5Z',
+'10XWv6wmnIX0zHDHTtIsOoM71JtByLNVb',
+'10YZlXZ2JDp5f7ehg4xMdFkkZCD5NVHNI',
+'12FLV4q_9X4EzGrqIWtGShCo-BUYrmRlG',
+'134bxFTgfLwZYWvWhIa7swmhS2UGCV7M0',
+'15X6Ho70GmLxlDHubSDnEfEQq85s0CKol',
+'17dJXRk_VIZuQhULjj52-BqaUAnaaeeOH',
+'17yLRua1a3AgBYuZC4_36D7x5-kfLON7L',
+'1A2ZYFc6Mey_pJvBtB9gGXL5zxDeJtdRM',
+'1AiH391YcyhizRgWSldH8Oijd6PzG9a9Y',
+'1EC4BT0SBHsYf6iYXGYXUxhmKhYNbXoeY',
+'1Ffz5h8qjND_jS-wA3QUxtQ0DUaoNj9wC',
+'1GDU4aonNheXJ0pK7NsWqjLyXNDzE1NwM',
+'1IJooNeDkLj4TqCxra7iOjFYtVU182e7I',
+'1MLaLICacB1DpyPv1jkFq8SrY1tRKl7aN',
+'1NYTPv-3PsWs7kjeer_uf4pfGMsbwTi0E',
+'1N_Y_bmCTUuu15IYS9j-XLJNH28OyZD9H',
+'1RZkpzxIQgrCYnWBGm_w42stbyzVmEPva',
+'1VlAVkEbnTbFnto57sMbfFkbzU7p67LL7',
+'1aVvPfIXoRDC2XqmDMG92fUIZtrFpIsJq',
+'1bHSd6XzLDYIAwnQYlDPRo8FLnH8DDJnw',
+'1cMBJlt0A6JwfMS7fhcvR7cnJ4468gLze',
+'1cNNmCgY6iAbHMtGm2UPeJX_NeMnb2rQn',
+'1cvLjbwFDPjD2avHzjMuwDGKYDjjXLT5v',
+'1dhxT_QsbygFdLV9ZYUQ6wd5_2mZSb6e5',
+'1eaS_7K8012AneqC5LkwmuLEqqJmPO1sq',
+'1hg9wgSkhRIzYiIhCGq1xjbFMxzSz4pSm',
+'1iDJWZcRz_zGbOTQpYN9U1V707X5xo3yv',
+'1jNwjUx7zdHHFKxFtAXSbYLMrmVKDdRxS',
+'1jqZLJ5xJhxdChh9SKlbahsLviqbqPzFx',
+'1ldV6zBMMrWfovkNbV2bSSkHyZmPUKYlI',
+'1nzPO4LXl6PJ5TffOe6c2pHJFmZzSUDfp',
+'1sWFLzNsAo0ZQ_nbusrNm9I7DnfFh4TIq',
+'1t0NXhHNdHQrwuMCzfiGu1CYb1z47-XVK',
+'1tTJETsOhpIIi6i3BWFzdU20F9Ba4_L—',
+'1w2ZwrKigqOHqXMRnyY4GD_jNn0VTCrWE',
+'1wkcFrGXx8dVNf5gYMkEaNeIdvIRNazJz',
+'1wmMgdqL-B56PI4sHQ-Fr4GFxp28ptb8U',
+'1zso2rorqe_FXDXbMfHXl3vDRodD8H7fC',],  # Add your SSS tile File IDs here as a list
+    'mbes': '1lE9X1S2Lqt3UxKgEJto5cURf1gTxOADr',  # Add your MBES File ID here
+    'mag_tif': '1jyYQ9ICEFjXxFAatFQvGb-9byu3ryq5P',  # Add your Mag TIF File ID here
+    'turbines': '18uYbX7OWZcqQfoBow6F_P4AmjptioeeO',  # Add your turbines GeoJSON File ID here
+    'sbp_lines': '1cZCoNX1t68X1BoiyikYKRAV0vzo_3pGO',  # Add your SBP lines GeoJSON File ID here
+    'hazards': '1h3FUT5DYj3OAM3o3OtTUm-TmjCCoj8hM',  # Add your hazards GeoJSON File ID here
+    'cable_route': ''  # Add your cable route GeoJSON File ID here (optional)
+}
+
+st.sidebar.header("📁 Quick Load Datasets")
+st.sidebar.markdown("*Pre-configured from Google Drive*")
+
+# SSS Tiles
+if st.sidebar.button("🚀 Load SSS Tiles", use_container_width=True):
+    if PRECONFIGURED_FILES['sss_tiles']:
+        with st.container():
+            st.info(f"Loading {len(PRECONFIGURED_FILES['sss_tiles'])} SSS tiles...")
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            success_count = 0
+            for i, file_id in enumerate(PRECONFIGURED_FILES['sss_tiles']):
+                try:
+                    status_text.text(f"Tile {i+1}/{len(PRECONFIGURED_FILES['sss_tiles'])}...")
+                    with tempfile.NamedTemporaryFile(delete=False, suffix='.tif') as tmp:
+                        download_from_gdrive(file_id, tmp.name)
+                        img, bounds = tif_to_png_base64(tmp.name, colormap='gray',
+                                                       max_size=max_pixels, is_sss=True)
+                        if img and bounds:
+                            st.session_state.raster_layers.append((img, bounds))
+                            success_count += 1
+                        os.unlink(tmp.name)
+                    progress_bar.progress((i + 1) / len(PRECONFIGURED_FILES['sss_tiles']))
+                except:
+                    pass
+            progress_bar.empty()
+            status_text.empty()
+            st.success(f"✅ {success_count}/{len(PRECONFIGURED_FILES['sss_tiles'])} SSS tiles loaded!")
+            st.rerun()
+    else:
+        st.sidebar.warning("⚠️ No SSS File IDs configured")
+
+# MBES
+if st.sidebar.button("🗺️ Load MBES", use_container_width=True):
+    if PRECONFIGURED_FILES['mbes']:
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.tif') as tmp:
+            try:
+                st.info("Loading MBES...")
+                download_from_gdrive(PRECONFIGURED_FILES['mbes'], tmp.name)
+                img, bounds = tif_to_png_base64(tmp.name, colormap=mbes_colormap, max_size=max_pixels)
+                if img and bounds:
+                    st.session_state.raster_layers.append((img, bounds))
+                    st.success("✅ MBES loaded!")
+                    st.rerun()
+                os.unlink(tmp.name)
+            except Exception as e:
+                st.error(f"Failed: {e}")
+    else:
+        st.sidebar.warning("⚠️ No MBES File ID configured")
+
+# Mag TIF
+if st.sidebar.button("🧲 Load Magnetometer TIF", use_container_width=True):
+    if PRECONFIGURED_FILES['mag_tif']:
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.tif') as tmp:
+            try:
+                st.info("Loading magnetometer data...")
+                download_from_gdrive(PRECONFIGURED_FILES['mag_tif'], tmp.name)
+                img, bounds = tif_to_png_base64(tmp.name, colormap='seismic',
+                                               max_size=max_pixels, is_mag=True)
+                if img and bounds:
+                    st.session_state.mag_tif_layer = (img, bounds)
+                    st.success("✅ Mag TIF loaded!")
+                    st.rerun()
+                os.unlink(tmp.name)
+            except Exception as e:
+                st.error(f"Failed: {e}")
+    else:
+        st.sidebar.warning("⚠️ No Mag TIF File ID configured")
+
+# Turbines
+if st.sidebar.button("🔌 Load Turbines", use_container_width=True):
+    if PRECONFIGURED_FILES['turbines']:
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.geojson') as tmp:
+            try:
+                st.info("Loading turbines...")
+                download_from_gdrive(PRECONFIGURED_FILES['turbines'], tmp.name)
+                st.session_state.turbines = gpd.read_file(tmp.name)
+                st.success(f"✅ Loaded {len(st.session_state.turbines)} turbines!")
+                st.rerun()
+                os.unlink(tmp.name)
+            except Exception as e:
+                st.error(f"Error: {e}")
+    else:
+        st.sidebar.warning("⚠️ No Turbines File ID configured")
+
+# SBP Lines
+if st.sidebar.button("🔊 Load SBP Lines", use_container_width=True):
+    if PRECONFIGURED_FILES['sbp_lines']:
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.geojson') as tmp:
+            try:
+                st.info("Loading SBP lines...")
+                download_from_gdrive(PRECONFIGURED_FILES['sbp_lines'], tmp.name)
+                st.session_state.sbp_lines = gpd.read_file(tmp.name)
+                st.success(f"✅ Loaded {len(st.session_state.sbp_lines)} SBP lines!")
+                st.rerun()
+                os.unlink(tmp.name)
+            except Exception as e:
+                st.error(f"Error: {e}")
+    else:
+        st.sidebar.warning("⚠️ No SBP Lines File ID configured")
+
+# Hazards
+if st.sidebar.button("⚠️ Load Hazards", use_container_width=True):
+    if PRECONFIGURED_FILES['hazards']:
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.geojson') as tmp:
+            try:
+                st.info("Loading hazards...")
+                download_from_gdrive(PRECONFIGURED_FILES['hazards'], tmp.name)
+                st.session_state.hazards = gpd.read_file(tmp.name)
+                st.success(f"✅ Loaded {len(st.session_state.hazards)} hazards!")
+                st.rerun()
+                os.unlink(tmp.name)
+            except Exception as e:
+                st.error(f"Error: {e}")
+    else:
+        st.sidebar.warning("⚠️ No Hazards File ID configured")
+
+# Cable Route (optional)
+if PRECONFIGURED_FILES.get('cable_route'):
+    if st.sidebar.button("📍 Load Cable Route", use_container_width=True):
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.geojson') as tmp:
+            try:
+                st.info("Loading cable route...")
+                download_from_gdrive(PRECONFIGURED_FILES['cable_route'], tmp.name)
+                gdf = gpd.read_file(tmp.name)
+                gdf_wgs84 = gdf.to_crs('EPSG:4326') if gdf.crs else gdf
+                st.session_state.vector_layers.append((gdf_wgs84, 'blue', 'Cable'))
+                st.success("✅ Cable route loaded!")
+                st.rerun()
+                os.unlink(tmp.name)
+            except Exception as e:
+                st.error(f"Error: {e}")
+
+st.sidebar.markdown("---")
 st.sidebar.header("📁 Data Loading")
 
 quality_preset = st.sidebar.radio(
@@ -398,120 +586,107 @@ def create_map(raster_layers, vector_layers, hazards, turbines, sbp_lines, mag_t
 # DATA LOADING
 # ==============================================================================
 
-st.sidebar.subheader("📡 SSS Data")
-sss_ids = st.sidebar.text_area("SSS File IDs", height=80)
+st.sidebar.markdown("---")
 
-if sss_ids and st.sidebar.button("🚀 Load SSS"):
-    sss_id_list = [fid.strip() for fid in sss_ids.strip().split('\n') if fid.strip()]
-    with st.container():
-        st.info(f"Loading {len(sss_id_list)} SSS tiles...")
-        progress_bar = st.progress(0)
-        status_text = st.empty()
-        success_count = 0
-        for i, file_id in enumerate(sss_id_list):
-            try:
-                status_text.text(f"Tile {i+1}/{len(sss_id_list)}...")
-                with tempfile.NamedTemporaryFile(delete=False, suffix='.tif') as tmp:
+# Expandable manual loading section
+with st.sidebar.expander("🔧 Advanced: Manual Loading", expanded=False):
+    st.markdown("*For loading custom datasets*")
+    
+    st.subheader("📡 SSS Data")
+    sss_ids = st.text_area("SSS File IDs", height=80, key="manual_sss")
+
+    
+    if sss_ids and st.button("🚀 Load SSS (Manual)", key="manual_sss_btn"):
+        sss_id_list = [fid.strip() for fid in sss_ids.strip().split('\n') if fid.strip()]
+        with st.container():
+            st.info(f"Loading {len(sss_id_list)} SSS tiles...")
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            success_count = 0
+            for i, file_id in enumerate(sss_id_list):
+                try:
+                    status_text.text(f"Tile {i+1}/{len(sss_id_list)}...")
+                    with tempfile.NamedTemporaryFile(delete=False, suffix='.tif') as tmp:
+                        download_from_gdrive(file_id, tmp.name)
+                        img, bounds = tif_to_png_base64(tmp.name, colormap='gray',
+                                                       max_size=max_pixels, is_sss=True)
+                        if img and bounds:
+                            st.session_state.raster_layers.append((img, bounds))
+                            success_count += 1
+                        os.unlink(tmp.name)
+                    progress_bar.progress((i + 1) / len(sss_id_list))
+                except:
+                    pass
+            progress_bar.empty()
+            status_text.empty()
+            st.success(f"✅ {success_count}/{len(sss_id_list)} SSS tiles loaded!")
+    
+    # MBES
+    st.subheader("🗺️ MBES Data")
+    mbes_ids = st.text_area("MBES File IDs", height=40, key="manual_mbes")
+    
+    if mbes_ids and st.button("Load MBES (Manual)", key="manual_mbes_btn"):
+        for file_id in [fid.strip() for fid in mbes_ids.strip().split('\n') if fid.strip()]:
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.tif') as tmp:
+                try:
                     download_from_gdrive(file_id, tmp.name)
-                    img, bounds = tif_to_png_base64(tmp.name, colormap='gray',
-                                                   max_size=max_pixels, is_sss=True)
+                    img, bounds = tif_to_png_base64(tmp.name, colormap=mbes_colormap, max_size=max_pixels)
                     if img and bounds:
                         st.session_state.raster_layers.append((img, bounds))
-                        success_count += 1
                     os.unlink(tmp.name)
-                progress_bar.progress((i + 1) / len(sss_id_list))
-            except:
-                pass
-        progress_bar.empty()
-        status_text.empty()
-        st.success(f"✅ {success_count}/{len(sss_id_list)} SSS tiles loaded!")
-
-# MBES
-st.sidebar.subheader("🗺️ MBES Data")
-mbes_ids = st.sidebar.text_area("MBES File IDs", height=40)
-
-if mbes_ids and st.sidebar.button("Load MBES"):
-    for file_id in [fid.strip() for fid in mbes_ids.strip().split('\n') if fid.strip()]:
+                except:
+                    pass
+        st.success("✅ MBES loaded!")
+    
+    # Mag TIF
+    st.subheader("🧲 Magnetometer TIF")
+    mag_tif_id = st.text_input("Mag TIF File ID", key="manual_mag")
+    
+    if mag_tif_id and st.button("Load Mag TIF (Manual)", key="manual_mag_btn"):
         with tempfile.NamedTemporaryFile(delete=False, suffix='.tif') as tmp:
             try:
-                download_from_gdrive(file_id, tmp.name)
-                img, bounds = tif_to_png_base64(tmp.name, colormap=mbes_colormap, max_size=max_pixels)
+                st.info("Loading magnetometer data...")
+                download_from_gdrive(mag_tif_id, tmp.name)
+                img, bounds = tif_to_png_base64(tmp.name, colormap='seismic',
+                                               max_size=max_pixels, is_mag=True)
                 if img and bounds:
-                    st.session_state.raster_layers.append((img, bounds))
-                os.unlink(tmp.name)
-            except:
-                pass
-    st.success("✅ MBES loaded!")
-
-# Mag TIF
-st.sidebar.subheader("🧲 Magnetometer TIF")
-mag_tif_id = st.sidebar.text_input("Mag TIF File ID")
-
-if mag_tif_id and st.sidebar.button("Load Mag TIF"):
-    with tempfile.NamedTemporaryFile(delete=False, suffix='.tif') as tmp:
-        try:
-            st.info("Loading magnetometer data...")
-            download_from_gdrive(mag_tif_id, tmp.name)
-            img, bounds = tif_to_png_base64(tmp.name, colormap='seismic',
-                                           max_size=max_pixels, is_mag=True)
-            if img and bounds:
-                st.session_state.mag_tif_layer = (img, bounds)
-                st.success("✅ Mag TIF loaded!")
-            os.unlink(tmp.name)
-        except Exception as e:
-            st.error(f"Failed: {e}")
-
-# SBP Lines
-st.sidebar.subheader("🔊 SBP Survey Lines")
-sbp_file = st.sidebar.file_uploader("Upload SBP Lines (GeoJSON)", type=['geojson', 'json'])
-
-if sbp_file:
-    try:
-        st.session_state.sbp_lines = gpd.read_file(sbp_file)
-        st.sidebar.success(f"✅ Loaded {len(st.session_state.sbp_lines)} SBP lines")
-    except Exception as e:
-        st.sidebar.error(f"Error: {e}")
-
-# Turbines
-st.sidebar.subheader("🔌 Turbines")
-
-# Option 1: Google Drive
-turbine_ids = st.sidebar.text_area("Turbine GeoJSON File IDs", height=40, 
-                                   help="Enter Google Drive file IDs, one per line")
-if turbine_ids and st.sidebar.button("Load Turbines (GDrive)"):
-    turbine_id_list = [fid.strip() for fid in turbine_ids.strip().split('\n') if fid.strip()]
-    for file_id in turbine_id_list:
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.geojson') as tmp:
-            try:
-                download_from_gdrive(file_id, tmp.name)
-                st.session_state.turbines = gpd.read_file(tmp.name)
-                st.sidebar.success(f"✅ Loaded {len(st.session_state.turbines)} turbines")
+                    st.session_state.mag_tif_layer = (img, bounds)
+                    st.success("✅ Mag TIF loaded!")
                 os.unlink(tmp.name)
             except Exception as e:
-                st.sidebar.error(f"Error: {e}")
+                st.error(f"Failed: {e}")
+    
+    # File uploads
+    st.subheader("📤 File Uploads")
+    turbine_file = st.file_uploader("Turbines (GeoJSON)", type=['geojson', 'json'], key="upload_turbines")
 
-# Option 2: File upload
-turbine_file = st.sidebar.file_uploader("OR Upload Turbines (GeoJSON)", type=['geojson', 'json'])
+    
+    if turbine_file:
+        try:
+            st.session_state.turbines = gpd.read_file(turbine_file)
+            st.success(f"✅ Loaded {len(st.session_state.turbines)} turbines")
+        except Exception as e:
+            st.error(f"Error: {e}")
+    
+    sbp_file = st.file_uploader("SBP Lines (GeoJSON)", type=['geojson', 'json'], key="upload_sbp")
+    
+    if sbp_file:
+        try:
+            st.session_state.sbp_lines = gpd.read_file(sbp_file)
+            st.success(f"✅ Loaded {len(st.session_state.sbp_lines)} SBP lines")
+        except Exception as e:
+            st.error(f"Error: {e}")
+    
+    hazard_file = st.file_uploader("Hazards (GeoJSON)", type=['geojson', 'json'], key="upload_hazards")
+    
+    if hazard_file:
+        try:
+            st.session_state.hazards = gpd.read_file(hazard_file)
+            st.success(f"✅ Loaded {len(st.session_state.hazards)} hazards")
+        except Exception as e:
+            st.error(f"Error: {e}")
 
-if turbine_file:
-    try:
-        st.session_state.turbines = gpd.read_file(turbine_file)
-        st.sidebar.success(f"✅ Loaded {len(st.session_state.turbines)} turbines")
-    except Exception as e:
-        st.sidebar.error(f"Error: {e}")
-
-# Hazards
-st.sidebar.subheader("⚠️ Hazards")
-hazard_file = st.sidebar.file_uploader("Upload Hazards (GeoJSON)", type=['geojson', 'json'])
-
-if hazard_file:
-    try:
-        st.session_state.hazards = gpd.read_file(hazard_file)
-        st.sidebar.success(f"✅ Loaded {len(st.session_state.hazards)} hazards")
-    except Exception as e:
-        st.sidebar.error(f"Error: {e}")
-
-if st.sidebar.button("🗑️ Clear All"):
+if st.sidebar.button("🗑️ Clear All", use_container_width=True):
     st.session_state.raster_layers = []
     st.session_state.vector_layers = []
     st.session_state.hazards = []
