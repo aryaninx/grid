@@ -259,18 +259,38 @@ def create_map(raster_layers, vector_layers, hazards, turbines, sbp_lines, mag_t
     if show_sbp and sbp_lines is not None and len(sbp_lines) > 0:
         try:
             gdf_sbp = sbp_lines.to_crs('EPSG:4326') if sbp_lines.crs else sbp_lines
+            
+            # Create simple GeoJSON without complex properties for tooltips
+            sbp_geojson = {
+                "type": "FeatureCollection",
+                "features": []
+            }
+            
+            for idx, row in gdf_sbp.iterrows():
+                # Get line name safely
+                line_name = str(row.get('line_name', row.get('name', row.get('id', f'Line {idx+1}'))))
+                
+                feature = {
+                    "type": "Feature",
+                    "geometry": row.geometry.__geo_interface__,
+                    "properties": {
+                        "name": line_name  # Only simple string property
+                    }
+                }
+                sbp_geojson["features"].append(feature)
+            
             folium.GeoJson(
-                gdf_sbp,
+                sbp_geojson,
                 name="SBP Survey Lines",
                 style_function=lambda x: {
                     'color': '#00FFFF',
                     'weight': 2,
                     'opacity': 0.7
                 },
-                tooltip=folium.GeoJsonTooltip(fields=['line_name'], aliases=['Line:'])
+                tooltip=folium.GeoJsonTooltip(fields=['name'], aliases=['Line:'])
             ).add_to(m)
-        except:
-            pass
+        except Exception as e:
+            st.warning(f"Could not display SBP lines: {e}")
     
     # Add turbines
     if turbines is not None and len(turbines) > 0:
