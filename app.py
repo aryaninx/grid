@@ -454,7 +454,24 @@ if sbp_file:
 
 # Turbines
 st.sidebar.subheader("🔌 Turbines")
-turbine_file = st.sidebar.file_uploader("Upload Turbines (GeoJSON)", type=['geojson', 'json'])
+
+# Option 1: Google Drive
+turbine_ids = st.sidebar.text_area("Turbine GeoJSON File IDs", height=40, 
+                                   help="Enter Google Drive file IDs, one per line")
+if turbine_ids and st.sidebar.button("Load Turbines (GDrive)"):
+    turbine_id_list = [fid.strip() for fid in turbine_ids.strip().split('\n') if fid.strip()]
+    for file_id in turbine_id_list:
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.geojson') as tmp:
+            try:
+                download_from_gdrive(file_id, tmp.name)
+                st.session_state.turbines = gpd.read_file(tmp.name)
+                st.sidebar.success(f"✅ Loaded {len(st.session_state.turbines)} turbines")
+                os.unlink(tmp.name)
+            except Exception as e:
+                st.sidebar.error(f"Error: {e}")
+
+# Option 2: File upload
+turbine_file = st.sidebar.file_uploader("OR Upload Turbines (GeoJSON)", type=['geojson', 'json'])
 
 if turbine_file:
     try:
@@ -488,94 +505,112 @@ if st.sidebar.button("🗑️ Clear All"):
 # HAZARD FILTERS
 # ==============================================================================
 
-if st.session_state.hazards is not None and len(st.session_state.hazards) > 0:
-    st.sidebar.markdown("---")
-    st.sidebar.subheader("🔍 Hazard Filters")
+# Display map if ANY data is loaded
+has_data = (
+    len(st.session_state.raster_layers) > 0 or
+    len(st.session_state.vector_layers) > 0 or
+    (st.session_state.hazards is not None and len(st.session_state.hazards) > 0) or
+    (st.session_state.turbines is not None and len(st.session_state.turbines) > 0) or
+    (st.session_state.sbp_lines is not None and len(st.session_state.sbp_lines) > 0) or
+    st.session_state.mag_tif_layer is not None
+)
+
+if has_data:
+    # Only show filters if we have hazards
+    if st.session_state.hazards is not None and len(st.session_state.hazards) > 0:
+        st.sidebar.markdown("---")
+        st.sidebar.subheader("🔍 Hazard Filters")
+        
+        # Get unique hazard types
+        hazard_types = sorted(st.session_state.hazards['hazard_type'].unique().tolist())
+        
+        selected_hazards = st.sidebar.multiselect(
+            "Show Hazard Types:",
+            hazard_types,
+            default=hazard_types,
+            help="Select which hazard types to display"
+        )
+        
+        # Risk filter
+        selected_risks = st.sidebar.multiselect(
+            "Show Risk Levels:",
+            ["Critical", "High", "Medium", "Low"],
+            default=["Critical", "High", "Medium", "Low"]
+        )
+        
+        # Timeline filter
+        st.sidebar.markdown("### 📅 Investigation Timeline")
+        
+        selected_timelines = st.sidebar.multiselect(
+            "Show by Timeline:",
+            ["3 months", "6 months", "1 year", "5 years", "All"],
+            default=["All"]
+        )
+        
+        # Expected failure filter
+        st.sidebar.markdown("### ⏰ Expected Time to Failure")
+        
+        selected_failures = st.sidebar.multiselect(
+            "Show by Failure Timeline:",
+            ["3 months", "6 months", "N/A", "All"],
+            default=["All"]
+        )
+        
+        # Filter hazards
+        filtered_hazards = st.session_state.hazards.copy()
+        
+        # Apply filters
+        if selected_hazards:
+            filtered_hazards = filtered_hazards[filtered_hazards['hazard_type'].isin(selected_hazards)]
+        
+        if selected_risks:
+            filtered_hazards = filtered_hazards[filtered_hazards['risk'].isin(selected_risks)]
+        
+        if "All" not in selected_timelines:
+            filtered_hazards = filtered_hazards[filtered_hazards['investigation_timeline'].isin(selected_timelines)]
+        
+        if "All" not in selected_failures:
+            filtered_hazards = filtered_hazards[filtered_hazards['expected_failure'].isin(selected_failures)]
+    else:
+        # No hazards loaded, use empty GeoDataFrame
+        filtered_hazards = gpd.GeoDataFrame()
     
-    # Get unique hazard types
-    hazard_types = sorted(st.session_state.hazards['hazard_type'].unique().tolist())
-    
-    selected_hazards = st.sidebar.multiselect(
-        "Show Hazard Types:",
-        hazard_types,
-        default=hazard_types,
-        help="Select which hazard types to display"
-    )
-    
-    # Risk filter
-    selected_risks = st.sidebar.multiselect(
-        "Show Risk Levels:",
-        ["Critical", "High", "Medium", "Low"],
-        default=["Critical", "High", "Medium", "Low"]
-    )
-    
-    # Timeline filter
-    st.sidebar.markdown("### 📅 Investigation Timeline")
-    
-    selected_timelines = st.sidebar.multiselect(
-        "Show by Timeline:",
-        ["3 months", "6 months", "1 year", "5 years", "All"],
-        default=["All"]
-    )
-    
-    # Expected failure filter
-    st.sidebar.markdown("### ⏰ Expected Time to Failure")
-    
-    selected_failures = st.sidebar.multiselect(
-        "Show by Failure Timeline:",
-        ["3 months", "6 months", "N/A", "All"],
-        default=["All"]
-    )
-    
-    # Toggle layers
+    # Toggle layers (show always if any data loaded)
     st.sidebar.markdown("---")
     st.sidebar.subheader("👁️ Layer Toggles")
     show_sbp = st.sidebar.checkbox("Show SBP Lines", value=True)
     show_mag_tif = st.sidebar.checkbox("Show Magnetometer TIF", value=True)
     
-    # Filter hazards
-    filtered_hazards = st.session_state.hazards.copy()
     
-    # Apply filters
-    if selected_hazards:
-        filtered_hazards = filtered_hazards[filtered_hazards['hazard_type'].isin(selected_hazards)]
+    # Summary metrics (only show if hazards exist)
+    if len(filtered_hazards) > 0:
+        st.subheader("📊 Hazard Summary")
+        
+        col1, col2, col3, col4, col5 = st.columns(5)
+        
+        with col1:
+            critical = len(filtered_hazards[filtered_hazards['risk'] == 'Critical'])
+            st.metric("🔴 Critical", critical)
+        
+        with col2:
+            high = len(filtered_hazards[filtered_hazards['risk'] == 'High'])
+            st.metric("🟠 High", high)
+        
+        with col3:
+            medium = len(filtered_hazards[filtered_hazards['risk'] == 'Medium'])
+            st.metric("🟡 Medium", medium)
+        
+        with col4:
+            low = len(filtered_hazards[filtered_hazards['risk'] == 'Low'])
+            st.metric("🟢 Low", low)
+        
+        with col5:
+            st.metric("📍 Total Shown", len(filtered_hazards))
     
-    if selected_risks:
-        filtered_hazards = filtered_hazards[filtered_hazards['risk'].isin(selected_risks)]
-    
-    if "All" not in selected_timelines:
-        filtered_hazards = filtered_hazards[filtered_hazards['investigation_timeline'].isin(selected_timelines)]
-    
-    if "All" not in selected_failures:
-        filtered_hazards = filtered_hazards[filtered_hazards['expected_failure'].isin(selected_failures)]
-    
-    # Summary metrics
-    st.subheader("📊 Hazard Summary")
-    
-    col1, col2, col3, col4, col5 = st.columns(5)
-    
-    with col1:
-        critical = len(filtered_hazards[filtered_hazards['risk'] == 'Critical'])
-        st.metric("🔴 Critical", critical)
-    
-    with col2:
-        high = len(filtered_hazards[filtered_hazards['risk'] == 'High'])
-        st.metric("🟠 High", high)
-    
-    with col3:
-        medium = len(filtered_hazards[filtered_hazards['risk'] == 'Medium'])
-        st.metric("🟡 Medium", medium)
-    
-    with col4:
-        low = len(filtered_hazards[filtered_hazards['risk'] == 'Low'])
-        st.metric("🟢 Low", low)
-    
-    with col5:
-        st.metric("📍 Total Shown", len(filtered_hazards))
-    
-    # Map
-    st.subheader("🗺️ Interactive Hazard Map")
-    st.info("💡 **Click** markers for detailed info | **Hover** for quick summary")
+    # Map (show always)
+    st.subheader("🗺️ Interactive Map")
+    if len(filtered_hazards) > 0:
+        st.info("💡 **Click** markers for detailed info | **Hover** for quick summary")
     
     m = create_map(
         st.session_state.raster_layers,
