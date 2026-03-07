@@ -1,881 +1,216 @@
 #!/usr/bin/env python3
 """
-THE GRID - Marine Survey Hazard Visualization Platform
-Demo version showcasing multi-sensor hazard detection visualization
+THE GRID - DEBUG MODE
+Comprehensive error logging and testing
 """
 
 import streamlit as st
-import rasterio
-from rasterio.warp import transform_bounds
-import geopandas as gpd
-import numpy as np
-from PIL import Image
-import folium
-from folium import plugins
-from streamlit_folium import st_folium
-import tempfile
-import os
-import base64
-from io import BytesIO
-import requests
-import matplotlib
-matplotlib.use('Agg')
-from matplotlib.cm import get_cmap
-import pandas as pd
-from datetime import datetime
+import traceback
 
-st.set_page_config(page_title="The Grid - Marine Risk Viewer", layout="wide", page_icon="⚠️")
+# Debug log
+if 'debug_log' not in st.session_state:
+    st.session_state.debug_log = []
+
+def log_debug(message, error=None):
+    log_entry = f"[{len(st.session_state.debug_log)}] {message}"
+    if error:
+        log_entry += f"\nError: {str(error)}\n{traceback.format_exc()}"
+    st.session_state.debug_log.append(log_entry)
+
+try:
+    log_debug("Importing modules...")
+    import rasterio
+    from rasterio.warp import transform_bounds
+    import geopandas as gpd
+    import numpy as np
+    from PIL import Image
+    import folium
+    from streamlit_folium import st_folium
+    import tempfile, os, base64, requests
+    from io import BytesIO
+    import matplotlib
+    matplotlib.use('Agg')
+    from matplotlib.cm import get_cmap
+    log_debug("✅ Imports successful")
+except Exception as e:
+    log_debug("❌ Import failed", e)
+    st.error(f"Import error: {e}\n{traceback.format_exc()}")
+    st.stop()
+
+st.set_page_config(page_title="The Grid - DEBUG", layout="wide", page_icon="🐛")
 
 # Session state
-if 'raster_layers' not in st.session_state:
-    st.session_state.raster_layers = []
-if 'vector_layers' not in st.session_state:
-    st.session_state.vector_layers = []
-if 'hazards' not in st.session_state:
-    st.session_state.hazards = []
-if 'turbines' not in st.session_state:
-    st.session_state.turbines = []
-if 'sbp_lines' not in st.session_state:
-    st.session_state.sbp_lines = []
-if 'mag_tif_layer' not in st.session_state:
-    st.session_state.mag_tif_layer = None
+for key in ['raster_layers', 'vector_layers', 'hazards', 'turbines', 'sbp_lines', 'mag_tif_layer']:
+    if key not in st.session_state:
+        st.session_state[key] = [] if key != 'mag_tif_layer' else None
 
-st.title("⚠️ The Grid - Marine Hazard Visualization")
+st.title("🐛 The Grid - DEBUG MODE")
 
-# Sidebar
-# ==============================================================================
-# PRE-CONFIGURED GOOGLE DRIVE FILE IDs
-# ==============================================================================
-# Update these with your actual Google Drive File IDs
-PRECONFIGURED_FILES = {
-    'sss_tiles': ['1-fd4WYSO3jAurneJNV_QzMJVx3F5rojM',
-'1reqiNT6_XKdFc4LzjAM634CRe3qqReZP',
-'1MmJAYU9O6bjqst0ufZW5s_7DZQirSr5Z',
-'10XWv6wmnIX0zHDHTtIsOoM71JtByLNVb',
-'10YZlXZ2JDp5f7ehg4xMdFkkZCD5NVHNI',
-'12FLV4q_9X4EzGrqIWtGShCo-BUYrmRlG',
-'134bxFTgfLwZYWvWhIa7swmhS2UGCV7M0',
-'15X6Ho70GmLxlDHubSDnEfEQq85s0CKol',
-'17dJXRk_VIZuQhULjj52-BqaUAnaaeeOH',
-'17yLRua1a3AgBYuZC4_36D7x5-kfLON7L',
-'1A2ZYFc6Mey_pJvBtB9gGXL5zxDeJtdRM',
-'1AiH391YcyhizRgWSldH8Oijd6PzG9a9Y',
-'1EC4BT0SBHsYf6iYXGYXUxhmKhYNbXoeY',
-'1Ffz5h8qjND_jS-wA3QUxtQ0DUaoNj9wC',
-'1GDU4aonNheXJ0pK7NsWqjLyXNDzE1NwM',
-'1IJooNeDkLj4TqCxra7iOjFYtVU182e7I',
-'1MLaLICacB1DpyPv1jkFq8SrY1tRKl7aN',
-'1NYTPv-3PsWs7kjeer_uf4pfGMsbwTi0E',
-'1N_Y_bmCTUuu15IYS9j-XLJNH28OyZD9H',
-'1RZkpzxIQgrCYnWBGm_w42stbyzVmEPva',
-'1VlAVkEbnTbFnto57sMbfFkbzU7p67LL7',
-'1aVvPfIXoRDC2XqmDMG92fUIZtrFpIsJq',
-'1bHSd6XzLDYIAwnQYlDPRo8FLnH8DDJnw',
-'1cMBJlt0A6JwfMS7fhcvR7cnJ4468gLze',
-'1cNNmCgY6iAbHMtGm2UPeJX_NeMnb2rQn',
-'1cvLjbwFDPjD2avHzjMuwDGKYDjjXLT5v',
-'1dhxT_QsbygFdLV9ZYUQ6wd5_2mZSb6e5',
-'1eaS_7K8012AneqC5LkwmuLEqqJmPO1sq',
-'1hg9wgSkhRIzYiIhCGq1xjbFMxzSz4pSm',
-'1iDJWZcRz_zGbOTQpYN9U1V707X5xo3yv',
-'1jNwjUx7zdHHFKxFtAXSbYLMrmVKDdRxS',
-'1jqZLJ5xJhxdChh9SKlbahsLviqbqPzFx',
-'1ldV6zBMMrWfovkNbV2bSSkHyZmPUKYlI',
-'1nzPO4LXl6PJ5TffOe6c2pHJFmZzSUDfp',
-'1sWFLzNsAo0ZQ_nbusrNm9I7DnfFh4TIq',
-'1t0NXhHNdHQrwuMCzfiGu1CYb1z47-XVK',
-'1tTJETsOhpIIi6i3BWFzdU20F9Ba4_L—',
-'1w2ZwrKigqOHqXMRnyY4GD_jNn0VTCrWE',
-'1wkcFrGXx8dVNf5gYMkEaNeIdvIRNazJz',
-'1wmMgdqL-B56PI4sHQ-Fr4GFxp28ptb8U',
-'1zso2rorqe_FXDXbMfHXl3vDRodD8H7fC',],  # Add your SSS tile File IDs here as a list
-    'mbes': '1lE9X1S2Lqt3UxKgEJto5cURf1gTxOADr',  # Add your MBES File ID here
-    'mag_tif': '1jyYQ9ICEFjXxFAatFQvGb-9byu3ryq5P',  # Add your Mag TIF File ID here
-    'turbines': '18uYbX7OWZcqQfoBow6F_P4AmjptioeeO',  # Add your turbines GeoJSON File ID here
-    'sbp_lines': '1cZCoNX1t68X1BoiyikYKRAV0vzo_3pGO',  # Add your SBP lines GeoJSON File ID here
-    'hazards': '1h3FUT5DYj3OAM3o3OtTUm-TmjCCoj8hM',  # Add your hazards GeoJSON File ID here
-    'cable_route': ''  # Add your cable route GeoJSON File ID here (optional)
-}
-
-st.sidebar.header("📁 Quick Load Datasets")
-st.sidebar.markdown("*Pre-configured from Google Drive*")
-
-# SSS Tiles
-if st.sidebar.button("🚀 Load SSS Tiles", use_container_width=True):
-    if PRECONFIGURED_FILES['sss_tiles']:
-        with st.container():
-            st.info(f"Loading {len(PRECONFIGURED_FILES['sss_tiles'])} SSS tiles...")
-            progress_bar = st.progress(0)
-            status_text = st.empty()
-            success_count = 0
-            for i, file_id in enumerate(PRECONFIGURED_FILES['sss_tiles']):
-                try:
-                    status_text.text(f"Tile {i+1}/{len(PRECONFIGURED_FILES['sss_tiles'])}...")
-                    with tempfile.NamedTemporaryFile(delete=False, suffix='.tif') as tmp:
-                        download_from_gdrive(file_id, tmp.name)
-                        img, bounds = tif_to_png_base64(tmp.name, colormap='gray',
-                                                       max_size=max_pixels, is_sss=True)
-                        if img and bounds:
-                            st.session_state.raster_layers.append((img, bounds))
-                            success_count += 1
-                        os.unlink(tmp.name)
-                    progress_bar.progress((i + 1) / len(PRECONFIGURED_FILES['sss_tiles']))
-                except:
-                    pass
-            progress_bar.empty()
-            status_text.empty()
-            st.success(f"✅ {success_count}/{len(PRECONFIGURED_FILES['sss_tiles'])} SSS tiles loaded!")
+# Debug Log
+with st.expander("🔍 Debug Log (Click to expand)", expanded=True):
+    col1, col2 = st.columns([1, 4])
+    with col1:
+        if st.button("Clear Log"):
+            st.session_state.debug_log = []
             st.rerun()
-    else:
-        st.sidebar.warning("⚠️ No SSS File IDs configured")
-
-# MBES
-if st.sidebar.button("🗺️ Load MBES", use_container_width=True):
-    if PRECONFIGURED_FILES['mbes']:
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.tif') as tmp:
-            try:
-                st.info("Loading MBES...")
-                download_from_gdrive(PRECONFIGURED_FILES['mbes'], tmp.name)
-                img, bounds = tif_to_png_base64(tmp.name, colormap=mbes_colormap, max_size=max_pixels)
-                if img and bounds:
-                    st.session_state.raster_layers.append((img, bounds))
-                    st.success("✅ MBES loaded!")
-                    st.rerun()
-                os.unlink(tmp.name)
-            except Exception as e:
-                st.error(f"Failed: {e}")
-    else:
-        st.sidebar.warning("⚠️ No MBES File ID configured")
-
-# Mag TIF
-if st.sidebar.button("🧲 Load Magnetometer TIF", use_container_width=True):
-    if PRECONFIGURED_FILES['mag_tif']:
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.tif') as tmp:
-            try:
-                st.info("Loading magnetometer data...")
-                download_from_gdrive(PRECONFIGURED_FILES['mag_tif'], tmp.name)
-                img, bounds = tif_to_png_base64(tmp.name, colormap='seismic',
-                                               max_size=max_pixels, is_mag=True)
-                if img and bounds:
-                    st.session_state.mag_tif_layer = (img, bounds)
-                    st.success("✅ Mag TIF loaded!")
-                    st.rerun()
-                os.unlink(tmp.name)
-            except Exception as e:
-                st.error(f"Failed: {e}")
-    else:
-        st.sidebar.warning("⚠️ No Mag TIF File ID configured")
-
-# Turbines
-if st.sidebar.button("🔌 Load Turbines", use_container_width=True):
-    if PRECONFIGURED_FILES['turbines']:
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.geojson') as tmp:
-            try:
-                st.info("Loading turbines...")
-                download_from_gdrive(PRECONFIGURED_FILES['turbines'], tmp.name)
-                st.session_state.turbines = gpd.read_file(tmp.name)
-                st.success(f"✅ Loaded {len(st.session_state.turbines)} turbines!")
-                st.rerun()
-                os.unlink(tmp.name)
-            except Exception as e:
-                st.error(f"Error: {e}")
-    else:
-        st.sidebar.warning("⚠️ No Turbines File ID configured")
-
-# SBP Lines
-if st.sidebar.button("🔊 Load SBP Lines", use_container_width=True):
-    if PRECONFIGURED_FILES['sbp_lines']:
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.geojson') as tmp:
-            try:
-                st.info("Loading SBP lines...")
-                download_from_gdrive(PRECONFIGURED_FILES['sbp_lines'], tmp.name)
-                st.session_state.sbp_lines = gpd.read_file(tmp.name)
-                st.success(f"✅ Loaded {len(st.session_state.sbp_lines)} SBP lines!")
-                st.rerun()
-                os.unlink(tmp.name)
-            except Exception as e:
-                st.error(f"Error: {e}")
-    else:
-        st.sidebar.warning("⚠️ No SBP Lines File ID configured")
-
-# Hazards
-if st.sidebar.button("⚠️ Load Hazards", use_container_width=True):
-    if PRECONFIGURED_FILES['hazards']:
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.geojson') as tmp:
-            try:
-                st.info("Loading hazards...")
-                download_from_gdrive(PRECONFIGURED_FILES['hazards'], tmp.name)
-                st.session_state.hazards = gpd.read_file(tmp.name)
-                st.success(f"✅ Loaded {len(st.session_state.hazards)} hazards!")
-                st.rerun()
-                os.unlink(tmp.name)
-            except Exception as e:
-                st.error(f"Error: {e}")
-    else:
-        st.sidebar.warning("⚠️ No Hazards File ID configured")
-
-# Cable Route (optional)
-if PRECONFIGURED_FILES.get('cable_route'):
-    if st.sidebar.button("📍 Load Cable Route", use_container_width=True):
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.geojson') as tmp:
-            try:
-                st.info("Loading cable route...")
-                download_from_gdrive(PRECONFIGURED_FILES['cable_route'], tmp.name)
-                gdf = gpd.read_file(tmp.name)
-                gdf_wgs84 = gdf.to_crs('EPSG:4326') if gdf.crs else gdf
-                st.session_state.vector_layers.append((gdf_wgs84, 'blue', 'Cable'))
-                st.success("✅ Cable route loaded!")
-                st.rerun()
-                os.unlink(tmp.name)
-            except Exception as e:
-                st.error(f"Error: {e}")
-
-st.sidebar.markdown("---")
-st.sidebar.header("📁 Data Loading")
-
-quality_preset = st.sidebar.radio(
-    "Quality",
-    ["Fast (500px)", "Good (1000px)", "High (2000px)", "Full Resolution"],
-    index=1
-)
-
-quality_map = {
-    "Fast (500px)": 500,
-    "Good (1000px)": 1000,
-    "High (2000px)": 2000,
-    "Full Resolution": 10000
-}
-max_pixels = quality_map[quality_preset]
-
-st.sidebar.header("🎨 Display Settings")
-basemap = st.sidebar.selectbox("Basemap", ['OpenStreetMap', 'Esri Satellite'], index=0)
-mbes_colormap = st.sidebar.selectbox("MBES/Mag Colormap", ['ocean', 'viridis', 'seismic'], index=0)
-
-
-def download_from_gdrive(file_id, output_path):
-    url = f"https://drive.google.com/uc?id={file_id}&export=download"
-    session = requests.Session()
-    response = session.get(url, stream=True)
-    for key, value in response.cookies.items():
-        if key.startswith('download_warning'):
-            params = {'id': file_id, 'confirm': value}
-            response = session.get(url, params=params, stream=True)
-    with open(output_path, 'wb') as f:
-        f.write(response.content)
-    return output_path
-
-
-@st.cache_data(show_spinner=False)
-def tif_to_png_base64(file_path, colormap='gray', max_size=500, is_sss=False, is_mag=False):
-    try:
-        with rasterio.open(file_path) as src:
-            orig_h, orig_w = src.height, src.width
-            if max_size >= 10000:
-                downsample = 1
-                out_h, out_w = orig_h, orig_w
-            else:
-                downsample = max(1, int(max(orig_h, orig_w) / max_size))
-                out_h = orig_h // downsample
-                out_w = orig_w // downsample
-            
-            if src.count >= 3:
-                data = np.zeros((out_h, out_w, 3), dtype=np.float32)
-                for i in range(3):
-                    band = src.read(i + 1, out_shape=(out_h, out_w),
-                                   resampling=rasterio.enums.Resampling.average)
-                    data[:, :, i] = band.astype(np.float32)
-                is_rgb = True
-            else:
-                data = src.read(1, out_shape=(out_h, out_w),
-                              resampling=rasterio.enums.Resampling.average)
-                data = data.astype(np.float32)
-                is_rgb = False
-            
-            try:
-                bounds_wgs84 = transform_bounds(src.crs, 'EPSG:4326', *src.bounds)
-            except:
-                bounds_wgs84 = src.bounds
-            
-            nodata = src.nodata
-            
-            if is_rgb:
-                valid_mask = np.ones((out_h, out_w), dtype=bool)
-                if nodata is not None:
-                    invalid = np.all(data == nodata, axis=2)
-                    valid_mask &= ~invalid
-                black = np.all(data == 0, axis=2)
-                valid_mask &= ~black
-                white = np.all(data == 255, axis=2)
-                valid_mask &= ~white
-                
-                if not valid_mask.any():
-                    return None, None
-                
-                data_norm = np.clip(data / 255.0, 0, 1)
-                rgba = np.zeros((out_h, out_w, 4), dtype=np.float32)
-                rgba[:, :, :3] = data_norm
-                rgba[:, :, 3] = valid_mask.astype(np.float32)
-            else:
-                valid_mask = np.ones(data.shape, dtype=bool)
-                if nodata is not None:
-                    valid_mask &= (data != nodata)
-                if is_sss:
-                    valid_mask &= (data != 0)
-                    valid_mask &= (data < 255)
-                valid_mask &= np.isfinite(data)
-                
-                if not valid_mask.any():
-                    return None, None
-                
-                valid_data = data[valid_mask]
-                
-                if is_sss:
-                    vmin, vmax = np.percentile(valid_data, [0.5, 99.5])
-                elif is_mag:
-                    abs_max = np.percentile(np.abs(valid_data), 99)
-                    vmin, vmax = -abs_max, abs_max
-                else:
-                    vmin, vmax = np.percentile(valid_data, [2, 98])
-                
-                if vmax == vmin:
-                    vmax = vmin + 1
-                
-                data_norm = np.clip((data - vmin) / (vmax - vmin), 0, 1)
-                data_norm[~valid_mask] = 0
-                
-                cmap = get_cmap(colormap)
-                rgba = cmap(data_norm)
-                rgba[:, :, 3] = valid_mask.astype(np.float32)
-            
-            rgba_uint8 = (rgba * 255).astype(np.uint8)
-            img = Image.fromarray(rgba_uint8, mode='RGBA')
-            
-            buffer = BytesIO()
-            img.save(buffer, format='PNG', optimize=True)
-            buffer.seek(0)
-            img_base64 = base64.b64encode(buffer.read()).decode()
-            
-            return img_base64, bounds_wgs84
-            
-    except Exception as e:
-        st.error(f"Error: {str(e)}")
-        return None, None
-
-
-def get_hazard_icon(hazard_type):
-    icons = {
-        'Wreck': 'ship',
-        'UXO': 'exclamation-triangle',
-        'Boulder': 'circle',
-        'Boulder Field': 'circle',
-        'Shallow Gas': 'cloud',
-        'Buried Channel': 'water',
-        'Sand Wave Field': 'water',
-        'Hard Ground': 'square',
-        'Pipeline': 'minus'
-    }
-    return icons.get(hazard_type, 'info-sign')
-
-
-def get_risk_color(risk):
-    colors = {
-        'Critical': '#DC143C',
-        'High': '#FF8C00',
-        'Medium': '#FFD700',
-        'Low': '#90EE90'
-    }
-    return colors.get(risk, '#808080')
-
-
-def create_map(raster_layers, vector_layers, hazards, turbines, sbp_lines, mag_tif, basemap_choice,
-               show_sbp=True, show_mag_tif=True):
+    with col2:
+        st.caption(f"{len(st.session_state.debug_log)} log entries")
     
-    all_bounds = [b for _, b in raster_layers if b]
-    if all_bounds:
-        min_lon = min(b[0] for b in all_bounds)
-        min_lat = min(b[1] for b in all_bounds)
-        max_lon = max(b[2] for b in all_bounds)
-        max_lat = max(b[3] for b in all_bounds)
-        center_lat = (min_lat + max_lat) / 2
-        center_lon = (min_lon + max_lon) / 2
+    if st.session_state.debug_log:
+        st.code("\n\n".join(st.session_state.debug_log[-20:]), language="text")
     else:
-        center_lat, center_lon = 53.77, 0.15
+        st.info("No debug messages yet. Upload files to see logs.")
+
+# What's the current error?
+st.markdown("---")
+st.header("❓ What error are you seeing?")
+st.info("**Common errors:**\n- AssertionError when uploading GeoJSON → Usually from list in properties\n- ValueError with GeoDataFrame → Boolean check issue\n- Import errors → Missing packages\n- Download fails → Invalid Google Drive File ID")
+
+# Test specific functionality
+st.sidebar.header("🧪 Test Specific Features")
+
+test_option = st.sidebar.selectbox("Test what?", [
+    "Nothing",
+    "Upload Hazards GeoJSON", 
+    "Upload SBP Lines GeoJSON",
+    "Test Google Drive Download",
+    "Test TIF Processing"
+])
+
+if test_option == "Upload Hazards GeoJSON":
+    st.subheader("Test: Upload Hazards")
+    uploaded = st.file_uploader("Upload hazards GeoJSON", type=['geojson', 'json'])
     
-    if basemap_choice == 'Esri Satellite':
-        tiles = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
-        m = folium.Map(location=[center_lat, center_lon], zoom_start=13, tiles=None)
-        folium.TileLayer(tiles=tiles, attr='Esri').add_to(m)
-    else:
-        m = folium.Map(location=[center_lat, center_lon], zoom_start=13, tiles='OpenStreetMap')
-    
-    # Add rasters (SSS/MBES)
-    for i, (img_base64, bounds) in enumerate(raster_layers):
-        if img_base64 and bounds:
-            img_url = f"data:image/png;base64,{img_base64}"
-            folium.raster_layers.ImageOverlay(
-                image=img_url,
-                bounds=[[bounds[1], bounds[0]], [bounds[3], bounds[2]]],
-                opacity=0.85,
-                interactive=True,
-                name=f"Survey Data {i+1}"
-            ).add_to(m)
-    
-    # Add Mag TIF (if loaded and toggle on)
-    if show_mag_tif and mag_tif:
-        img_base64, bounds = mag_tif
-        if img_base64 and bounds:
-            img_url = f"data:image/png;base64,{img_base64}"
-            folium.raster_layers.ImageOverlay(
-                image=img_url,
-                bounds=[[bounds[1], bounds[0]], [bounds[3], bounds[2]]],
-                opacity=0.6,
-                interactive=True,
-                name="Magnetometer TIF"
-            ).add_to(m)
-    
-    # Add vectors
-    for gdf, color, name in vector_layers:
-        if gdf is not None:
-            try:
-                gdf_wgs84 = gdf.to_crs('EPSG:4326') if gdf.crs and str(gdf.crs) != 'EPSG:4326' else gdf
-                folium.GeoJson(gdf_wgs84, name=name,
-                             style_function=lambda x, c=color: {'color': c, 'weight': 2}).add_to(m)
-            except:
-                pass
-    
-    # Add SBP lines (if toggle on)
-    if show_sbp and sbp_lines is not None and len(sbp_lines) > 0:
+    if uploaded:
         try:
-            gdf_sbp = sbp_lines.to_crs('EPSG:4326') if sbp_lines.crs else sbp_lines
+            log_debug(f"Reading uploaded file: {uploaded.name}")
+            st.session_state.hazards = gpd.read_file(uploaded)
+            log_debug(f"✅ Loaded {len(st.session_state.hazards)} features")
             
-            # Create simple GeoJSON without complex properties for tooltips
-            sbp_geojson = {
-                "type": "FeatureCollection",
-                "features": []
-            }
-            
-            for idx, row in gdf_sbp.iterrows():
-                # Get line name safely
-                line_name = str(row.get('line_name', row.get('name', row.get('id', f'Line {idx+1}'))))
-                
-                feature = {
-                    "type": "Feature",
-                    "geometry": row.geometry.__geo_interface__,
-                    "properties": {
-                        "name": line_name  # Only simple string property
-                    }
-                }
-                sbp_geojson["features"].append(feature)
-            
-            folium.GeoJson(
-                sbp_geojson,
-                name="SBP Survey Lines",
-                style_function=lambda x: {
-                    'color': '#00FFFF',
-                    'weight': 2,
-                    'opacity': 0.7
-                },
-                tooltip=folium.GeoJsonTooltip(fields=['name'], aliases=['Line:'])
-            ).add_to(m)
-        except Exception as e:
-            st.warning(f"Could not display SBP lines: {e}")
-    
-    # Add turbines
-    if turbines is not None and len(turbines) > 0:
-        try:
-            gdf_turb = turbines.to_crs('EPSG:4326') if turbines.crs else turbines
-            for idx, row in gdf_turb.iterrows():
-                folium.CircleMarker(
-                    location=[row.geometry.y, row.geometry.x],
-                    radius=8,
-                    color='#4169E1',
-                    fill=True,
-                    fillColor='#4169E1',
-                    fillOpacity=0.8,
-                    popup=f"<b>{row['name']}</b><br>Status: {row.get('status', 'Unknown')}",
-                    tooltip=row['name']
-                ).add_to(m)
-        except:
-            pass
-    
-    # Add hazards with detailed popups
-    if hazards is not None and len(hazards) > 0:
-        try:
-            gdf_haz = hazards.to_crs('EPSG:4326') if hazards.crs else hazards
-            for idx, row in gdf_haz.iterrows():
-                risk = row.get('risk', 'Unknown')
-                hazard_type = row.get('hazard_type', 'Unknown')
-                
-                # Build detailed popup
-                sensors_list = ', '.join(row.get('detected_by', []))
-                
-                popup_html = f"""
-                <div style="width:320px; font-family:Arial;">
-                    <h3 style="margin:0; color:{get_risk_color(risk)}; border-bottom:2px solid {get_risk_color(risk)}; padding-bottom:5px;">
-                        {hazard_type} - {row.get('id', '')}
-                    </h3>
-                    
-                    <div style="margin-top:10px;">
-                        <p style="margin:5px 0;"><b>Name:</b> {row.get('name', 'N/A')}</p>
-                        <p style="margin:5px 0;"><b>Size:</b> {row.get('size', 'N/A')}</p>
-                    </div>
-                    
-                    <div style="margin-top:10px; background:#f0f0f0; padding:8px; border-radius:4px;">
-                        <h4 style="margin:5px 0; color:#333;">📡 Detected By:</h4>
-                        <p style="margin:5px 0;">{sensors_list}</p>
-                    </div>
-                    
-                    <div style="margin-top:10px;">
-                        <p style="margin:5px 0;"><b>Distance to Turbine:</b> {row.get('distance_to_turbine_m', 'N/A')}m</p>
-                        <p style="margin:5px 0;"><b>Nearest:</b> {row.get('nearest_turbine', 'N/A')}</p>
-                    </div>
-                    
-                    <div style="margin-top:10px; background:#fff3cd; padding:8px; border-radius:4px;">
-                        <h4 style="margin:5px 0; color:#333;">⚠️ Risk Assessment</h4>
-                        <p style="margin:5px 0;"><b>Level:</b> <span style="color:{get_risk_color(risk)}; font-weight:bold;">{risk}</span></p>
-                        <p style="margin:5px 0;"><b>Score:</b> {row.get('risk_score', 'N/A')}/10</p>
-                    </div>
-                    
-                    <div style="margin-top:10px; background:#f0f0f0; padding:8px; border-radius:4px;">
-                        <h4 style="margin:5px 0; color:#333;">🎯 Action Required</h4>
-                        <p style="margin:5px 0;">{row.get('action', 'N/A')}</p>
-                    </div>
-                    
-                    <div style="margin-top:10px; background:#d4edda; padding:8px; border-radius:4px;">
-                        <h4 style="margin:5px 0; color:#333;">💰 Estimated Cost</h4>
-                        <p style="margin:5px 0; font-weight:bold;">{row.get('cost', 'N/A')}</p>
-                    </div>
-                    
-                    <div style="margin-top:10px; background:#d1ecf1; padding:8px; border-radius:4px;">
-                        <h4 style="margin:5px 0; color:#333;">📅 Timeline</h4>
-                        <p style="margin:5px 0;"><b>Investigation:</b> {row.get('investigation_timeline', 'N/A')}</p>
-                        <p style="margin:5px 0;"><b>Expected Failure:</b> {row.get('expected_failure', 'N/A')}</p>
-                    </div>
-                    
-                    <div style="margin-top:10px; font-size:11px; color:#666; border-top:1px solid #ddd; padding-top:5px;">
-                        <p style="margin:2px 0;"><b>Details:</b> {row.get('details', 'N/A')}</p>
-                    </div>
-                </div>
-                """
-                
-                # Tooltip (hover)
-                tooltip_text = f"""<b>{hazard_type}</b><br>{row.get('name', '')}<br>Risk: {risk}<br>{row.get('distance_to_turbine_m', 'N/A')}m to {row.get('nearest_turbine', '')}"""
-                
-                folium.Marker(
-                    location=[row.geometry.y, row.geometry.x],
-                    popup=folium.Popup(popup_html, max_width=340),
-                    tooltip=folium.Tooltip(tooltip_text),
-                    icon=folium.Icon(
-                        color='red' if risk == 'Critical' else 'orange' if risk == 'High' else 'beige',
-                        icon=get_hazard_icon(hazard_type),
-                        prefix='fa'
-                    )
-                ).add_to(m)
-        except Exception as e:
-            st.warning(f"Error adding hazards to map: {e}")
-    
-    folium.plugins.Fullscreen().add_to(m)
-    folium.plugins.MousePosition().add_to(m)
-    folium.plugins.MeasureControl(position='topleft').add_to(m)
-    folium.LayerControl().add_to(m)
-    
-    return m
-
-
-# ==============================================================================
-# DATA LOADING
-# ==============================================================================
-
-st.sidebar.markdown("---")
-
-# Expandable manual loading section
-with st.sidebar.expander("🔧 Advanced: Manual Loading", expanded=False):
-    st.markdown("*For loading custom datasets*")
-    
-    st.subheader("📡 SSS Data")
-    sss_ids = st.text_area("SSS File IDs", height=80, key="manual_sss")
-
-    
-    if sss_ids and st.button("🚀 Load SSS (Manual)", key="manual_sss_btn"):
-        sss_id_list = [fid.strip() for fid in sss_ids.strip().split('\n') if fid.strip()]
-        with st.container():
-            st.info(f"Loading {len(sss_id_list)} SSS tiles...")
-            progress_bar = st.progress(0)
-            status_text = st.empty()
-            success_count = 0
-            for i, file_id in enumerate(sss_id_list):
-                try:
-                    status_text.text(f"Tile {i+1}/{len(sss_id_list)}...")
-                    with tempfile.NamedTemporaryFile(delete=False, suffix='.tif') as tmp:
-                        download_from_gdrive(file_id, tmp.name)
-                        img, bounds = tif_to_png_base64(tmp.name, colormap='gray',
-                                                       max_size=max_pixels, is_sss=True)
-                        if img and bounds:
-                            st.session_state.raster_layers.append((img, bounds))
-                            success_count += 1
-                        os.unlink(tmp.name)
-                    progress_bar.progress((i + 1) / len(sss_id_list))
-                except:
-                    pass
-            progress_bar.empty()
-            status_text.empty()
-            st.success(f"✅ {success_count}/{len(sss_id_list)} SSS tiles loaded!")
-    
-    # MBES
-    st.subheader("🗺️ MBES Data")
-    mbes_ids = st.text_area("MBES File IDs", height=40, key="manual_mbes")
-    
-    if mbes_ids and st.button("Load MBES (Manual)", key="manual_mbes_btn"):
-        for file_id in [fid.strip() for fid in mbes_ids.strip().split('\n') if fid.strip()]:
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.tif') as tmp:
-                try:
-                    download_from_gdrive(file_id, tmp.name)
-                    img, bounds = tif_to_png_base64(tmp.name, colormap=mbes_colormap, max_size=max_pixels)
-                    if img and bounds:
-                        st.session_state.raster_layers.append((img, bounds))
-                    os.unlink(tmp.name)
-                except:
-                    pass
-        st.success("✅ MBES loaded!")
-    
-    # Mag TIF
-    st.subheader("🧲 Magnetometer TIF")
-    mag_tif_id = st.text_input("Mag TIF File ID", key="manual_mag")
-    
-    if mag_tif_id and st.button("Load Mag TIF (Manual)", key="manual_mag_btn"):
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.tif') as tmp:
-            try:
-                st.info("Loading magnetometer data...")
-                download_from_gdrive(mag_tif_id, tmp.name)
-                img, bounds = tif_to_png_base64(tmp.name, colormap='seismic',
-                                               max_size=max_pixels, is_mag=True)
-                if img and bounds:
-                    st.session_state.mag_tif_layer = (img, bounds)
-                    st.success("✅ Mag TIF loaded!")
-                os.unlink(tmp.name)
-            except Exception as e:
-                st.error(f"Failed: {e}")
-    
-    # File uploads
-    st.subheader("📤 File Uploads")
-    turbine_file = st.file_uploader("Turbines (GeoJSON)", type=['geojson', 'json'], key="upload_turbines")
-
-    
-    if turbine_file:
-        try:
-            st.session_state.turbines = gpd.read_file(turbine_file)
-            st.success(f"✅ Loaded {len(st.session_state.turbines)} turbines")
-        except Exception as e:
-            st.error(f"Error: {e}")
-    
-    sbp_file = st.file_uploader("SBP Lines (GeoJSON)", type=['geojson', 'json'], key="upload_sbp")
-    
-    if sbp_file:
-        try:
-            st.session_state.sbp_lines = gpd.read_file(sbp_file)
-            st.success(f"✅ Loaded {len(st.session_state.sbp_lines)} SBP lines")
-        except Exception as e:
-            st.error(f"Error: {e}")
-    
-    hazard_file = st.file_uploader("Hazards (GeoJSON)", type=['geojson', 'json'], key="upload_hazards")
-    
-    if hazard_file:
-        try:
-            st.session_state.hazards = gpd.read_file(hazard_file)
             st.success(f"✅ Loaded {len(st.session_state.hazards)} hazards")
+            st.dataframe(st.session_state.hazards.head())
+            
+            # Check for problematic properties
+            st.subheader("Property Check")
+            for col in st.session_state.hazards.columns:
+                sample = st.session_state.hazards[col].iloc[0]
+                type_str = str(type(sample))
+                if isinstance(sample, list):
+                    st.warning(f"⚠️ Column '{col}' contains lists: {sample}")
+                elif isinstance(sample, dict):
+                    st.warning(f"⚠️ Column '{col}' contains dicts: {sample}")
+                else:
+                    st.success(f"✅ Column '{col}': {type_str}")
+                    
         except Exception as e:
-            st.error(f"Error: {e}")
+            st.error(f"❌ Failed to load: {e}")
+            log_debug("Hazards upload failed", e)
+            st.code(traceback.format_exc())
 
-if st.sidebar.button("🗑️ Clear All", use_container_width=True):
-    st.session_state.raster_layers = []
-    st.session_state.vector_layers = []
-    st.session_state.hazards = []
-    st.session_state.turbines = []
-    st.session_state.sbp_lines = []
-    st.session_state.mag_tif_layer = None
-    st.success("Cleared!")
-    st.rerun()
+elif test_option == "Upload SBP Lines GeoJSON":
+    st.subheader("Test: Upload SBP Lines")
+    uploaded = st.file_uploader("Upload SBP lines GeoJSON", type=['geojson', 'json'])
+    
+    if uploaded:
+        try:
+            log_debug(f"Reading uploaded file: {uploaded.name}")
+            st.session_state.sbp_lines = gpd.read_file(uploaded)
+            log_debug(f"✅ Loaded {len(st.session_state.sbp_lines)} features")
+            
+            st.success(f"✅ Loaded {len(st.session_state.sbp_lines)} SBP lines")
+            st.dataframe(st.session_state.sbp_lines.head())
+            
+            # Check properties
+            st.subheader("Property Check")
+            for col in st.session_state.sbp_lines.columns:
+                if col != 'geometry':
+                    sample = st.session_state.sbp_lines[col].iloc[0]
+                    type_str = str(type(sample))
+                    if isinstance(sample, (list, dict)):
+                        st.warning(f"⚠️ Column '{col}' contains complex type: {type_str}")
+                    else:
+                        st.success(f"✅ Column '{col}': {type_str}")
+                        
+        except Exception as e:
+            st.error(f"❌ Failed: {e}")
+            log_debug("SBP upload failed", e)
+            st.code(traceback.format_exc())
 
-# ==============================================================================
-# HAZARD FILTERS
-# ==============================================================================
+elif test_option == "Test Google Drive Download":
+    st.subheader("Test: Google Drive Download")
+    test_id = st.text_input("Enter Google Drive File ID")
+    
+    if st.button("Test Download") and test_id:
+        try:
+            log_debug(f"Testing download of {test_id}")
+            url = f"https://drive.google.com/uc?id={test_id}&export=download"
+            
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.test') as tmp:
+                session = requests.Session()
+                response = session.get(url, stream=True, timeout=30)
+                
+                for key, value in response.cookies.items():
+                    if key.startswith('download_warning'):
+                        params = {'id': test_id, 'confirm': value}
+                        response = session.get(url, params=params, stream=True, timeout=30)
+                
+                with open(tmp.name, 'wb') as f:
+                    f.write(response.content)
+                
+                size = os.path.getsize(tmp.name)
+                log_debug(f"✅ Downloaded {size} bytes")
+                st.success(f"✅ Downloaded {size:,} bytes")
+                os.unlink(tmp.name)
+                
+        except Exception as e:
+            st.error(f"❌ Download failed: {e}")
+            log_debug("GDrive download test failed", e)
+            st.code(traceback.format_exc())
 
-# Display map if ANY data is loaded
-has_data = (
-    len(st.session_state.raster_layers) > 0 or
-    len(st.session_state.vector_layers) > 0 or
-    (st.session_state.hazards is not None and len(st.session_state.hazards) > 0) or
-    (st.session_state.turbines is not None and len(st.session_state.turbines) > 0) or
-    (st.session_state.sbp_lines is not None and len(st.session_state.sbp_lines) > 0) or
-    st.session_state.mag_tif_layer is not None
-)
+elif test_option == "Test TIF Processing":
+    st.subheader("Test: TIF Processing")
+    uploaded_tif = st.file_uploader("Upload TIF file", type=['tif', 'tiff'])
+    
+    if uploaded_tif:
+        try:
+            log_debug(f"Processing uploaded TIF: {uploaded_tif.name}")
+            
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.tif') as tmp:
+                tmp.write(uploaded_tif.read())
+                tmp_path = tmp.name
+            
+            log_debug(f"Temp file: {tmp_path}")
+            
+            # Try to open with rasterio
+            with rasterio.open(tmp_path) as src:
+                st.success(f"✅ Opened with rasterio")
+                st.write(f"Size: {src.width}x{src.height}")
+                st.write(f"Bands: {src.count}")
+                st.write(f"CRS: {src.crs}")
+                st.write(f"Bounds: {src.bounds}")
+                log_debug(f"TIF info: {src.width}x{src.height}, {src.count} bands, CRS={src.crs}")
+            
+            os.unlink(tmp_path)
+            
+        except Exception as e:
+            st.error(f"❌ Failed: {e}")
+            log_debug("TIF test failed", e)
+            st.code(traceback.format_exc())
 
-if has_data:
-    # Only show filters if we have hazards
-    if st.session_state.hazards is not None and len(st.session_state.hazards) > 0:
-        st.sidebar.markdown("---")
-        st.sidebar.subheader("🔍 Hazard Filters")
-        
-        # Get unique hazard types
-        hazard_types = sorted(st.session_state.hazards['hazard_type'].unique().tolist())
-        
-        selected_hazards = st.sidebar.multiselect(
-            "Show Hazard Types:",
-            hazard_types,
-            default=hazard_types,
-            help="Select which hazard types to display"
-        )
-        
-        # Risk filter
-        selected_risks = st.sidebar.multiselect(
-            "Show Risk Levels:",
-            ["Critical", "High", "Medium", "Low"],
-            default=["Critical", "High", "Medium", "Low"]
-        )
-        
-        # Timeline filter
-        st.sidebar.markdown("### 📅 Investigation Timeline")
-        
-        selected_timelines = st.sidebar.multiselect(
-            "Show by Timeline:",
-            ["3 months", "6 months", "1 year", "5 years", "All"],
-            default=["All"]
-        )
-        
-        # Expected failure filter
-        st.sidebar.markdown("### ⏰ Expected Time to Failure")
-        
-        selected_failures = st.sidebar.multiselect(
-            "Show by Failure Timeline:",
-            ["3 months", "6 months", "N/A", "All"],
-            default=["All"]
-        )
-        
-        # Filter hazards
-        filtered_hazards = st.session_state.hazards.copy()
-        
-        # Apply filters
-        if selected_hazards:
-            filtered_hazards = filtered_hazards[filtered_hazards['hazard_type'].isin(selected_hazards)]
-        
-        if selected_risks:
-            filtered_hazards = filtered_hazards[filtered_hazards['risk'].isin(selected_risks)]
-        
-        if "All" not in selected_timelines:
-            filtered_hazards = filtered_hazards[filtered_hazards['investigation_timeline'].isin(selected_timelines)]
-        
-        if "All" not in selected_failures:
-            filtered_hazards = filtered_hazards[filtered_hazards['expected_failure'].isin(selected_failures)]
-    else:
-        # No hazards loaded, use empty GeoDataFrame
-        filtered_hazards = gpd.GeoDataFrame()
-    
-    # Toggle layers (show always if any data loaded)
-    st.sidebar.markdown("---")
-    st.sidebar.subheader("👁️ Layer Toggles")
-    show_sbp = st.sidebar.checkbox("Show SBP Lines", value=True)
-    show_mag_tif = st.sidebar.checkbox("Show Magnetometer TIF", value=True)
-    
-    
-    # Summary metrics (only show if hazards exist)
-    if len(filtered_hazards) > 0:
-        st.subheader("📊 Hazard Summary")
-        
-        col1, col2, col3, col4, col5 = st.columns(5)
-        
-        with col1:
-            critical = len(filtered_hazards[filtered_hazards['risk'] == 'Critical'])
-            st.metric("🔴 Critical", critical)
-        
-        with col2:
-            high = len(filtered_hazards[filtered_hazards['risk'] == 'High'])
-            st.metric("🟠 High", high)
-        
-        with col3:
-            medium = len(filtered_hazards[filtered_hazards['risk'] == 'Medium'])
-            st.metric("🟡 Medium", medium)
-        
-        with col4:
-            low = len(filtered_hazards[filtered_hazards['risk'] == 'Low'])
-            st.metric("🟢 Low", low)
-        
-        with col5:
-            st.metric("📍 Total Shown", len(filtered_hazards))
-    
-    # Map (show always)
-    st.subheader("🗺️ Interactive Map")
-    if len(filtered_hazards) > 0:
-        st.info("💡 **Click** markers for detailed info | **Hover** for quick summary")
-    
-    m = create_map(
-        st.session_state.raster_layers,
-        st.session_state.vector_layers,
-        filtered_hazards,
-        st.session_state.turbines,
-        st.session_state.sbp_lines,
-        st.session_state.mag_tif_layer,
-        basemap,
-        show_sbp=show_sbp,
-        show_mag_tif=show_mag_tif
-    )
-    st_folium(m, width=1400, height=700)
-    
-    # Hazard table
-    if len(filtered_hazards) > 0:
-        st.subheader("📋 Hazard Register")
-        
-        display_cols = ['id', 'hazard_type', 'risk', 'distance_to_turbine_m', 
-                       'investigation_timeline', 'expected_failure', 'action', 'cost']
-        
-        df_display = filtered_hazards[display_cols].copy()
-        st.dataframe(df_display, use_container_width=True, height=400)
-        
-        # Export
-        csv = filtered_hazards.to_csv(index=False)
-        st.download_button(
-            "📥 Download Hazard Register (CSV)",
-            csv,
-            f"hazard_register_{datetime.now().strftime('%Y%m%d')}.csv",
-            "text/csv"
-        )
-        
-        # Breakdown
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown("### By Hazard Type")
-            type_counts = filtered_hazards['hazard_type'].value_counts()
-            for htype, count in type_counts.items():
-                st.write(f"• **{htype}**: {count}")
-        
-        with col2:
-            st.markdown("### By Investigation Timeline")
-            timeline_counts = filtered_hazards['investigation_timeline'].value_counts()
-            for timeline, count in timeline_counts.items():
-                st.write(f"• **{timeline}**: {count} hazards")
+# Current state
+st.sidebar.markdown("---")
+st.sidebar.header("📊 Current State")
+st.sidebar.metric("Raster layers", len(st.session_state.raster_layers))
+st.sidebar.metric("Hazards", len(st.session_state.hazards) if isinstance(st.session_state.hazards, gpd.GeoDataFrame) else 0)
+st.sidebar.metric("SBP lines", len(st.session_state.sbp_lines) if isinstance(st.session_state.sbp_lines, gpd.GeoDataFrame) else 0)
+st.sidebar.metric("Turbines", len(st.session_state.turbines) if isinstance(st.session_state.turbines, gpd.GeoDataFrame) else 0)
 
-else:
-    st.info("👆 Upload hazard GeoJSON file to begin visualization")
-    
-    st.markdown("""
-    ## 🎯 The Grid - Demo Instructions
-    
-    ### Step 1: Load Survey Data
-    - **SSS tiles**: Background imagery
-    - **MBES**: Bathymetry
-    - **Mag TIF**: Magnetometer heatmap
-    
-    ### Step 2: Load Infrastructure
-    - **Turbines GeoJSON**: Wind turbine locations
-    - **SBP Lines GeoJSON**: Survey line coverage
-    
-    ### Step 3: Load Hazards
-    - **Hazards GeoJSON**: All detected hazards
-    - Filter by type, risk, timeline
-    - Click markers for detailed popups
-    
-    ### Demo Files Available:
-    - `demo_hazards_all.geojson` - 14 sample hazards
-    - `demo_turbines.geojson` - 9 turbine locations  
-    - `demo_sbp_lines.geojson` - 6 survey lines
-    """)
+# System info
+st.sidebar.markdown("---")
+st.sidebar.subheader("ℹ️ System Info")
+st.sidebar.code(f"""Streamlit: {st.__version__}
+Rasterio: {rasterio.__version__}
+GeoPandas: {gpd.__version__}
+NumPy: {np.__version__}""")
+
+log_debug("Debug app ready")
