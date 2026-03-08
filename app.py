@@ -222,6 +222,17 @@ st.markdown(f"""
     .js-plotly-plot {{
         background-color: #FFFFFF !important;
     }}
+    
+    /* Hide sidebar collapse button */
+    [data-testid="collapsedControl"] {{
+        display: none;
+    }}
+    
+    /* Logo fix - ensure proper display */
+    img {{
+        display: inline-block !important;
+        max-width: 100%;
+    }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -236,13 +247,14 @@ st.markdown(f"""
             padding: 20px; border-radius: 12px; border: 2px solid {INX_COLORS['neon_current']};
             margin-bottom: 20px; text-align: center; box-shadow: 0 4px 20px rgba(209, 254, 73, 0.2);'>
     
-    <div style='display: flex; justify-content: center; align-items: center; gap: 30px;'>
+    <div style='display: flex; justify-content: center; align-items: center; gap: 30px; flex-wrap: wrap;'>
         <!-- InX Logo -->
-        <img src='https://raw.githubusercontent.com/aryaninx/grid/main/assets/INXTECH_Logo_Vertical-Light.png' 
-             style='height: 80px; filter: drop-shadow(0 2px 10px rgba(209, 254, 73, 0.3));'
-             alt='InX Technologies'>
+        <img src='https://raw.githubusercontent.com/aryaninx/grid/main/assets/INXTECH_Logo_Vertical-Light.png?v=1' 
+             style='height: 80px; width: auto; filter: drop-shadow(0 2px 10px rgba(209, 254, 73, 0.3));'
+             alt='InX Technologies'
+             onerror="this.style.display='none'">
         
-        <div>
+        <div style='text-align: left;'>
             <h1 style='color: {INX_COLORS['neon_current']}; margin: 0; font-size: 48px; font-weight: 700;'>
                 ⚡ THE GRID
             </h1>
@@ -956,7 +968,12 @@ elif page == "🔬 Evidence Viewer":
         center_lat = type_hazards.geometry.y.mean()
         center_lon = type_hazards.geometry.x.mean()
         
-        m = folium.Map([center_lat, center_lon], zoom_start=13, tiles='Esri Satellite')
+        m = folium.Map([center_lat, center_lon], zoom_start=13, tiles=None)
+        folium.TileLayer(
+            tiles='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+            attr='Esri',
+            name='Esri Satellite'
+        ).add_to(m)
         
         # Add MBES layer if available
         if st.session_state.raster_layers:
