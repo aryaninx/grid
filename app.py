@@ -57,8 +57,8 @@ st.markdown(f"""
     
     /* Main background */
     .stApp {{
-        background-color: {INX_COLORS['deep_black']};
-        color: {INX_COLORS['limitless_space']};
+        background-color: #000000;
+        color: #FFFFFF;
     }}
     
     /* Sidebar */
@@ -69,20 +69,20 @@ st.markdown(f"""
     
     /* Sidebar text */
     [data-testid="stSidebar"] * {{
-        color: {INX_COLORS['limitless_space']} !important;
+        color: #FFFFFF !important;
     }}
     
     /* Headers */
     h1, h2, h3, h4, h5, h6 {{
-        color: {INX_COLORS['neon_current']} !important;
+        color: #FFFFFF !important;
         font-weight: 600 !important;
     }}
     
     /* Buttons */
     .stButton>button {{
-        background-color: {INX_COLORS['precision_blue']};
-        color: {INX_COLORS['limitless_space']};
-        border: 1px solid {INX_COLORS['neon_current']};
+        background-color: #000000;
+        color: #FFFFFF;
+        border: 2px solid {INX_COLORS['neon_current']};
         border-radius: 8px;
         font-weight: 500;
         transition: all 0.3s;
@@ -90,7 +90,7 @@ st.markdown(f"""
     
     .stButton>button:hover {{
         background-color: {INX_COLORS['neon_current']};
-        color: {INX_COLORS['deep_black']};
+        color: #000000;
         border-color: {INX_COLORS['neon_current']};
         transform: translateY(-2px);
         box-shadow: 0 4px 12px rgba(209, 254, 73, 0.3);
@@ -98,14 +98,14 @@ st.markdown(f"""
     
     /* Radio buttons (page navigation) */
     .stRadio > div {{
-        background-color: {INX_COLORS['musk_green']};
+        background-color: #000000;
         padding: 10px;
         border-radius: 8px;
-        border: 1px solid {INX_COLORS['sage_green']};
+        border: 1px solid {INX_COLORS['neon_current']};
     }}
     
     .stRadio label {{
-        color: {INX_COLORS['limitless_space']} !important;
+        color: #FFFFFF !important;
         font-weight: 500 !important;
     }}
     
@@ -116,29 +116,46 @@ st.markdown(f"""
     }}
     
     [data-testid="stMetricLabel"] {{
-        color: {INX_COLORS['sage_green']} !important;
+        color: #FFFFFF !important;
     }}
     
     /* Dataframes */
     .dataframe {{
-        background-color: {INX_COLORS['musk_green']} !important;
-        color: {INX_COLORS['limitless_space']} !important;
+        background-color: #000000 !important;
+        color: #FFFFFF !important;
     }}
     
-    /* Input widgets */
-    .stSelectbox, .stMultiSelect {{
-        background-color: {INX_COLORS['musk_green']};
-        color: {INX_COLORS['limitless_space']};
+    /* Input widgets - Musk Green with white text and neon outline */
+    .stSelectbox > div > div {{
+        background-color: {INX_COLORS['musk_green']} !important;
+        color: #FFFFFF !important;
+        border: 2px solid {INX_COLORS['neon_current']} !important;
+    }}
+    
+    .stMultiSelect > div > div {{
+        background-color: {INX_COLORS['musk_green']} !important;
+        color: #FFFFFF !important;
+        border: 2px solid {INX_COLORS['neon_current']} !important;
+    }}
+    
+    /* Dropdown options */
+    [data-baseweb="popover"] {{
+        background-color: {INX_COLORS['musk_green']} !important;
+    }}
+    
+    [data-baseweb="popover"] * {{
+        color: #FFFFFF !important;
     }}
     
     /* Tabs */
     .stTabs [data-baseweb="tab-list"] {{
-        background-color: {INX_COLORS['musk_green']};
+        background-color: #000000;
         border-radius: 8px;
+        border: 1px solid {INX_COLORS['neon_current']};
     }}
     
     .stTabs [data-baseweb="tab"] {{
-        color: {INX_COLORS['sage_green']};
+        color: #FFFFFF;
         background-color: transparent;
     }}
     
@@ -149,27 +166,33 @@ st.markdown(f"""
     
     /* Info/success/warning boxes */
     .stSuccess {{
-        background-color: rgba(209, 254, 73, 0.1);
+        background-color: rgba(18, 36, 30, 0.8);
         border-left: 4px solid {INX_COLORS['neon_current']};
-        color: {INX_COLORS['limitless_space']};
+        color: #FFFFFF !important;
     }}
     
     .stInfo {{
-        background-color: rgba(0, 19, 195, 0.1);
-        border-left: 4px solid {INX_COLORS['precision_blue']};
-        color: {INX_COLORS['limitless_space']};
+        background-color: rgba(18, 36, 30, 0.8);
+        border-left: 4px solid {INX_COLORS['neon_current']};
+        color: #FFFFFF !important;
     }}
     
     .stWarning {{
-        background-color: rgba(209, 254, 73, 0.1);
+        background-color: rgba(18, 36, 30, 0.8);
         border-left: 4px solid {INX_COLORS['neon_current']};
-        color: {INX_COLORS['limitless_space']};
+        color: #FFFFFF !important;
+    }}
+    
+    .stError {{
+        background-color: rgba(18, 36, 30, 0.8);
+        border-left: 4px solid #FF4444;
+        color: #FFFFFF !important;
     }}
     
     /* Download button */
     .stDownloadButton>button {{
         background-color: {INX_COLORS['neon_current']};
-        color: {INX_COLORS['deep_black']};
+        color: #000000;
         border: none;
         font-weight: 600;
     }}
@@ -181,13 +204,23 @@ st.markdown(f"""
     
     /* Dividers */
     hr {{
-        border-color: {INX_COLORS['sage_green']} !important;
+        border-color: {INX_COLORS['neon_current']} !important;
         opacity: 0.3;
     }}
     
     /* Checkbox */
     .stCheckbox label {{
-        color: {INX_COLORS['limitless_space']} !important;
+        color: #FFFFFF !important;
+    }}
+    
+    /* Text elements */
+    p, span, div {{
+        color: #FFFFFF !important;
+    }}
+    
+    /* Plotly graphs - white background */
+    .js-plotly-plot {{
+        background-color: #FFFFFF !important;
     }}
 </style>
 """, unsafe_allow_html=True)
@@ -197,9 +230,9 @@ for key in ['raster_layers', 'hazards', 'turbines', 'sbp_lines', 'mag_tif_layer'
     if key not in st.session_state:
         st.session_state[key] = [] if key == 'raster_layers' else None
 
-# BRANDED HEADER WITH LOGO PLACEHOLDER
+# BRANDED HEADER WITH LOGO
 st.markdown(f"""
-<div style='background: linear-gradient(135deg, {INX_COLORS['musk_green']} 0%, {INX_COLORS['deep_black']} 100%); 
+<div style='background: #000000; 
             padding: 20px; border-radius: 12px; border: 2px solid {INX_COLORS['neon_current']};
             margin-bottom: 20px; text-align: center; box-shadow: 0 4px 20px rgba(209, 254, 73, 0.2);'>
     
@@ -213,7 +246,7 @@ st.markdown(f"""
             <h1 style='color: {INX_COLORS['neon_current']}; margin: 0; font-size: 48px; font-weight: 700;'>
                 ⚡ THE GRID
             </h1>
-            <p style='color: {INX_COLORS['sage_green']}; margin: 5px 0 0 0; font-size: 16px; letter-spacing: 2px;'>
+            <p style='color: #FFFFFF; margin: 5px 0 0 0; font-size: 16px; letter-spacing: 2px;'>
                 MARINE HAZARD INTELLIGENCE PLATFORM
             </p>
         </div>
@@ -426,14 +459,15 @@ def create_timeline_gantt(hazards_gdf, scenario='original'):
                                     line=dict(color=m['color'], width=3, dash='dash'),
                                     text=[m['label'],''], textposition='top center', showlegend=False))
     
-    # Dark theme for Gantt
+    # White theme for Gantt
     fig.update_layout(
         height=500,
-        plot_bgcolor='#2E2E2E',
-        paper_bgcolor='#12241E',
-        font=dict(color='#F2F2EF', family='Space Grotesk'),
-        xaxis=dict(gridcolor='#8F998D', gridwidth=0.5),
-        yaxis=dict(gridcolor='#8F998D', gridwidth=0.5)
+        plot_bgcolor='#FFFFFF',
+        paper_bgcolor='#FFFFFF',
+        font=dict(color='#000000', family='Space Grotesk'),
+        xaxis=dict(gridcolor='#E0E0E0', gridwidth=0.5, showgrid=True),
+        yaxis=dict(gridcolor='#E0E0E0', gridwidth=0.5, showgrid=True),
+        title=dict(font=dict(color='#000000'))
     )
     return fig, total_months, financial_markers if scenario=='with_hazards' else []
 
@@ -527,8 +561,8 @@ def generate_evidence(haz):
 st.sidebar.markdown(f"""
 <div style='text-align: center; padding: 15px; background: {INX_COLORS['neon_current']}; 
             border-radius: 8px; margin-bottom: 20px;'>
-    <div style='color: {INX_COLORS['deep_black']}; font-weight: 700; font-size: 28px;'>InX</div>
-    <div style='color: {INX_COLORS['deep_black']}; font-size: 11px; letter-spacing: 1px;'>TECHNOLOGIES</div>
+    <div style='color: #000000; font-weight: 700; font-size: 28px;'>InX</div>
+    <div style='color: #000000; font-size: 11px; letter-spacing: 1px;'>TECHNOLOGIES</div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -544,7 +578,7 @@ FILE_IDS = {
     'mag': '1jyYQ9ICEFjXxFAatFQvGb-9byu3ryq5P',
     'turbines': '18uYbX7OWZcqQfoBow6F_P4AmjptioeeO',
     'sbp': '1cZCoNX1t68X1BoiyikYKRAV0vzo_3pGO',
-    'hazards': '1h3FUT5DYj3OAM3o3OtTUm-TmjCCoj8hM'
+    'hazards': '1x_aerOM_LY7bw1CJdNC35zD2KkhJo4Sh'
 }
 
 st.sidebar.markdown("---")
@@ -658,9 +692,9 @@ if st.session_state.hazards is not None and len(st.session_state.hazards) > 0:
 
 st.sidebar.markdown("---")
 st.sidebar.markdown(f"""
-<div style='background: {INX_COLORS['precision_blue']}; padding: 10px; border-radius: 8px; text-align: center;'>
+<div style='background: #000000; padding: 10px; border-radius: 8px; text-align: center; border: 1px solid {INX_COLORS['neon_current']};'>
     <div style='color: {INX_COLORS['neon_current']}; font-weight: 600;'>✅ SYSTEM OPERATIONAL</div>
-    <div style='color: {INX_COLORS['limitless_space']}; font-size: 11px;'>
+    <div style='color: #FFFFFF; font-size: 11px;'>
         📡 {datetime.now().strftime('%H:%M:%S')}
     </div>
 </div>
@@ -909,22 +943,69 @@ elif page == "🔬 Evidence Viewer":
     st.header("🔬 Evidence Viewer - Hazard Analysis")
     
     if st.session_state.hazards is not None and len(st.session_state.hazards) > 0:
-        # Hazard selector
-        haz_list = [f"{row['id']}: {row.get('name','Unknown')}" for _, row in st.session_state.hazards.iterrows()]
-        selected = st.selectbox("Select Hazard to Analyze:", haz_list, key='ev_select')
+        # Hazard TYPE selector (not individual hazard)
+        hazard_types = sorted(st.session_state.hazards['hazard_type'].unique())
+        selected_type = st.selectbox("Select Hazard Type to Analyze:", hazard_types, key='ev_type_select')
         
-        if selected:
-            hid = selected.split(':')[0]
-            hrow = st.session_state.hazards[st.session_state.hazards['id']==hid].iloc[0]
+        # Filter hazards by type
+        type_hazards = st.session_state.hazards[st.session_state.hazards['hazard_type'] == selected_type]
+        
+        st.subheader(f"📍 {selected_type} Locations ({len(type_hazards)} detected)")
+        
+        # Create map with ALL hazards of this type + MBES
+        center_lat = type_hazards.geometry.y.mean()
+        center_lon = type_hazards.geometry.x.mean()
+        
+        m = folium.Map([center_lat, center_lon], zoom_start=13, tiles='Esri Satellite')
+        
+        # Add MBES layer if available
+        if st.session_state.raster_layers:
+            for img, bounds in st.session_state.raster_layers:
+                if img and bounds:
+                    folium.raster_layers.ImageOverlay(
+                        f"data:image/png;base64,{img}",
+                        [[bounds[1],bounds[0]],[bounds[3],bounds[2]]],
+                        opacity=0.7
+                    ).add_to(m)
+        
+        # Add all hazards of this type
+        for idx, row in type_hazards.iterrows():
+            risk = row.get('risk', 'Unknown')
+            colors = {'Critical':'red','High':'orange','Medium':'yellow','Low':'green'}
+            color = colors.get(risk, 'gray')
             
-            st.subheader(f"📍 Location: {hrow.get('name','Unknown')}")
+            # Simple popup with hazard ID
+            popup_html = f"""
+            <div style='font-family: Space Grotesk; padding: 10px;'>
+                <h4 style='margin: 0;'>{row.get('id','')}</h4>
+                <p style='margin: 5px 0;'><b>{row.get('name','')}</b></p>
+                <p style='margin: 5px 0;'>Risk: {risk} ({row.get('risk_score','')}/10)</p>
+                <p style='margin: 5px 0; font-size: 11px;'>Click marker to see detailed evidence below</p>
+            </div>
+            """
             
-            # Map
-            m = folium.Map([hrow.geometry.y, hrow.geometry.x], zoom_start=15)
-            folium.Marker([hrow.geometry.y, hrow.geometry.x],
-                popup=f"{hrow['id']}: {hrow.get('name')}",
-                icon=folium.Icon(color='red', icon='exclamation-triangle', prefix='fa')).add_to(m)
-            st_folium(m, width=1400, height=400)
+            folium.Marker(
+                [row.geometry.y, row.geometry.x],
+                popup=folium.Popup(popup_html, max_width=300),
+                tooltip=f"{row.get('id','')}: {row.get('name','')}",
+                icon=folium.Icon(color=color, icon='exclamation-triangle', prefix='fa')
+            ).add_to(m)
+        
+        folium.plugins.Fullscreen().add_to(m)
+        
+        # Display map
+        map_data = st_folium(m, width=1400, height=500, key='evidence_map')
+        
+        # Individual hazard selector for detailed evidence
+        st.markdown("---")
+        st.subheader("🔍 Detailed Evidence Analysis")
+        
+        haz_list = [f"{row['id']}: {row.get('name','Unknown')}" for _, row in type_hazards.iterrows()]
+        selected_hazard = st.selectbox("Select specific hazard for detailed analysis:", haz_list, key='ev_detail_select')
+        
+        if selected_hazard:
+            hid = selected_hazard.split(':')[0]
+            hrow = type_hazards[type_hazards['id']==hid].iloc[0]
             
             # Evidence
             ev = generate_evidence(hrow)
