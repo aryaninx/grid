@@ -414,7 +414,7 @@ FILE_IDS = {
     'mag': '1jyYQ9ICEFjXxFAatFQvGb-9byu3ryq5P',
     'turbines': '18uYbX7OWZcqQfoBow6F_P4AmjptioeeO',
     'sbp': '1cZCoNX1t68X1BoiyikYKRAV0vzo_3pGO',
-    'hazards': '1h3FUT5DYj3OAM3o3OtTUm-TmjCCoj8hM'
+    'hazards': '1x_aerOM_LY7bw1CJdNC35zD2KkhJo4Sh'
 }
 
 st.sidebar.markdown("---")
