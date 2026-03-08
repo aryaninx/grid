@@ -50,8 +50,17 @@ st.markdown(f"""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
     
-    /* Global Font */
+    /* Global Font - Applied Everywhere */
     * {{
+        font-family: 'Space Grotesk', sans-serif !important;
+    }}
+    
+    /* Folium popup text */
+    .leaflet-popup-content {{
+        font-family: 'Space Grotesk', sans-serif !important;
+    }}
+    
+    .leaflet-popup-content * {{
         font-family: 'Space Grotesk', sans-serif !important;
     }}
 </style>
@@ -64,24 +73,18 @@ for key in ['raster_layers', 'hazards', 'turbines', 'sbp_lines', 'mag_tif_layer'
 
 # BRANDED HEADER WITH LOGO FROM GOOGLE DRIVE
 # Replace FILE_ID with your actual Google Drive file ID
-LOGO_FILE_ID = "1A84a5D-19A-AeFcnb4elT3WxfSF5t-Em"  # Update this!
+LOGO_FILE_ID = "1gsPiE7nKz6j2X0gPvJqCO65cCVpXc32-"  # Update with your actual File ID
 
 st.markdown(f"""
-<div style='padding: 20px; margin-bottom: 20px; text-align: center;'>
-    <div style='display: flex; justify-content: center; align-items: center; gap: 30px; flex-wrap: wrap;'>
-        <!-- InX Logo from Google Drive -->
+<div style='padding: 10px 20px; margin-bottom: 20px;'>
+    <div style='display: flex; align-items: center; gap: 20px;'>
         <img src='https://drive.google.com/uc?export=view&id={LOGO_FILE_ID}' 
-             style='height: 80px; width: auto;'
-             alt='InX Technologies'>
-        
-        <div style='text-align: left;'>
-            <h1 style='margin: 0; font-size: 48px; font-weight: 700;'>
-                ⚡ THE GRID
-            </h1>
-            <p style='color: #666; margin: 5px 0 0 0; font-size: 16px; letter-spacing: 2px;'>
-                MARINE HAZARD INTELLIGENCE PLATFORM
-            </p>
-        </div>
+             style='height: 60px; width: auto;'
+             alt='InX Technologies'
+             onerror="this.style.display='none'">
+        <h1 style='margin: 0; font-size: 42px; font-weight: 700; font-family: Space Grotesk;'>
+            ⚡ THE GRID
+        </h1>
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -291,15 +294,24 @@ def create_timeline_gantt(hazards_gdf, scenario='original'):
                                     line=dict(color=m['color'], width=3, dash='dash'),
                                     text=[m['label'],''], textposition='top center', showlegend=False))
     
-    # White theme for Gantt
+    # White theme for Gantt with better layout
     fig.update_layout(
-        height=500,
+        height=600,  # Increased from 500 to prevent overlap
         plot_bgcolor='#FFFFFF',
         paper_bgcolor='#FFFFFF',
-        font=dict(color='#000000', family='Space Grotesk'),
+        font=dict(color='#000000', family='Space Grotesk', size=11),
         xaxis=dict(gridcolor='#E0E0E0', gridwidth=0.5, showgrid=True),
         yaxis=dict(gridcolor='#E0E0E0', gridwidth=0.5, showgrid=True),
-        title=dict(font=dict(color='#000000'))
+        title=dict(font=dict(color='#000000', size=16)),
+        margin=dict(l=200, r=50, t=80, b=100),  # Increased margins to prevent overlap
+        showlegend=True,
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=-0.15,  # Position legend below chart
+            xanchor="center",
+            x=0.5
+        )
     )
     return fig, total_months, financial_markers if scenario=='with_hazards' else []
 
@@ -402,7 +414,7 @@ FILE_IDS = {
     'mag': '1jyYQ9ICEFjXxFAatFQvGb-9byu3ryq5P',
     'turbines': '18uYbX7OWZcqQfoBow6F_P4AmjptioeeO',
     'sbp': '1cZCoNX1t68X1BoiyikYKRAV0vzo_3pGO',
-    'hazards': '1x_aerOM_LY7bw1CJdNC35zD2KkhJo4Sh'
+    'hazards': '1h3FUT5DYj3OAM3o3OtTUm-TmjCCoj8hM'
 }
 
 st.sidebar.markdown("---")
@@ -733,22 +745,37 @@ elif page == "📅 Project Timeline":
             fig_cost.update_layout(height=400)
             st.plotly_chart(fig_cost, use_container_width=True)
         
-        # Risk breakdown
+        # Risk breakdown with clickable navigation
         st.markdown("---")
         st.subheader("⚠️ Delay Contribution by Risk Level")
         col1, col2, col3, col4 = st.columns(4)
         with col1:
             cd = crit * 1.5
             st.metric("Critical", f"+{cd:.1f} mo", delta=f"{crit} hazards")
+            if crit > 0:
+                if st.button(f"📍 View {crit} Critical Hazards", key='btn_crit', use_container_width=True):
+                    st.info("💡 Navigate to 'Hazard Map' page and filter by 'Critical' risk to see these hazards")
+        
         with col2:
             hd = high * 0.75
             st.metric("High", f"+{hd:.1f} mo", delta=f"{high} hazards")
+            if high > 0:
+                if st.button(f"📍 View {high} High Hazards", key='btn_high', use_container_width=True):
+                    st.info("💡 Navigate to 'Hazard Map' page and filter by 'High' risk to see these hazards")
+        
         with col3:
             md = med * 0.3
             st.metric("Medium", f"+{md:.1f} mo", delta=f"{med} hazards")
+            if med > 0:
+                if st.button(f"📍 View {med} Medium Hazards", key='btn_med', use_container_width=True):
+                    st.info("💡 Navigate to 'Hazard Map' page and filter by 'Medium' risk to see these hazards")
+        
         with col4:
             ld = low * 0.1
             st.metric("Low", f"+{ld:.1f} mo", delta=f"{low} hazards")
+            if low > 0:
+                if st.button(f"📍 View {low} Low Hazards", key='btn_low', use_container_width=True):
+                    st.info("💡 Navigate to 'Hazard Map' page and filter by 'Low' risk to see these hazards")
     
     else:
         st.info("Load hazards to see timeline analysis")
@@ -816,15 +843,49 @@ elif page == "🔬 Evidence Viewer":
         
         folium.plugins.Fullscreen().add_to(m)
         
-        # Display map
+        # Display map with clickable markers
         map_data = st_folium(m, width=1400, height=500, key='evidence_map')
         
-        # Individual hazard selector for detailed evidence
+        # Auto-select hazard if marker clicked
+        if map_data and map_data.get('last_object_clicked'):
+            clicked_coords = map_data['last_object_clicked']
+            if clicked_coords:
+                # Find the closest hazard to clicked coordinates
+                clicked_lat = clicked_coords['lat']
+                clicked_lng = clicked_coords['lng']
+                
+                # Calculate distances and find closest
+                distances = type_hazards.geometry.apply(
+                    lambda geom: ((geom.y - clicked_lat)**2 + (geom.x - clicked_lng)**2)**0.5
+                )
+                closest_idx = distances.idxmin()
+                clicked_hazard = type_hazards.loc[closest_idx]
+                
+                # Update session state with clicked hazard
+                st.session_state['selected_evidence_hazard'] = clicked_hazard['id']
+        
+        # Detailed Evidence Analysis
         st.markdown("---")
         st.subheader("🔍 Detailed Evidence Analysis")
         
+        # Get the hazard to display (from click or dropdown)
         haz_list = [f"{row['id']}: {row.get('name','Unknown')}" for _, row in type_hazards.iterrows()]
-        selected_hazard = st.selectbox("Select specific hazard for detailed analysis:", haz_list, key='ev_detail_select')
+        
+        # Pre-select if clicked on map
+        default_idx = 0
+        if 'selected_evidence_hazard' in st.session_state:
+            clicked_id = st.session_state['selected_evidence_hazard']
+            for i, haz_str in enumerate(haz_list):
+                if haz_str.startswith(clicked_id):
+                    default_idx = i
+                    break
+        
+        selected_hazard = st.selectbox(
+            "Select specific hazard for detailed analysis:", 
+            haz_list, 
+            index=default_idx,
+            key='ev_detail_select'
+        )
         
         if selected_hazard:
             hid = selected_hazard.split(':')[0]
