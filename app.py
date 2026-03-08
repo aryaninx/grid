@@ -45,7 +45,7 @@ INX_COLORS = {
     'neon_current': '#D1FE49'
 }
 
-# CUSTOM CSS - DARK MODE + INX BRANDING
+# CUSTOM CSS - CLEAN WHITE THEME WITH INX CHART COLORS
 st.markdown(f"""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
@@ -53,185 +53,6 @@ st.markdown(f"""
     /* Global Font */
     * {{
         font-family: 'Space Grotesk', sans-serif !important;
-    }}
-    
-    /* Main background */
-    .stApp {{
-        background-color: #000000;
-        color: #FFFFFF;
-    }}
-    
-    /* Sidebar */
-    [data-testid="stSidebar"] {{
-        background-color: {INX_COLORS['musk_green']};
-        border-right: 2px solid {INX_COLORS['neon_current']};
-    }}
-    
-    /* Sidebar text */
-    [data-testid="stSidebar"] * {{
-        color: #FFFFFF !important;
-    }}
-    
-    /* Headers */
-    h1, h2, h3, h4, h5, h6 {{
-        color: #FFFFFF !important;
-        font-weight: 600 !important;
-    }}
-    
-    /* Buttons */
-    .stButton>button {{
-        background-color: #000000;
-        color: #FFFFFF;
-        border: 2px solid {INX_COLORS['neon_current']};
-        border-radius: 8px;
-        font-weight: 500;
-        transition: all 0.3s;
-    }}
-    
-    .stButton>button:hover {{
-        background-color: {INX_COLORS['neon_current']};
-        color: #000000;
-        border-color: {INX_COLORS['neon_current']};
-        transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(209, 254, 73, 0.3);
-    }}
-    
-    /* Radio buttons (page navigation) */
-    .stRadio > div {{
-        background-color: #000000;
-        padding: 10px;
-        border-radius: 8px;
-        border: 1px solid {INX_COLORS['neon_current']};
-    }}
-    
-    .stRadio label {{
-        color: #FFFFFF !important;
-        font-weight: 500 !important;
-    }}
-    
-    /* Metrics */
-    [data-testid="stMetricValue"] {{
-        color: {INX_COLORS['neon_current']} !important;
-        font-weight: 600 !important;
-    }}
-    
-    [data-testid="stMetricLabel"] {{
-        color: #FFFFFF !important;
-    }}
-    
-    /* Dataframes */
-    .dataframe {{
-        background-color: #000000 !important;
-        color: #FFFFFF !important;
-    }}
-    
-    /* Input widgets - Musk Green with white text and neon outline */
-    .stSelectbox > div > div {{
-        background-color: {INX_COLORS['musk_green']} !important;
-        color: #FFFFFF !important;
-        border: 2px solid {INX_COLORS['neon_current']} !important;
-    }}
-    
-    .stMultiSelect > div > div {{
-        background-color: {INX_COLORS['musk_green']} !important;
-        color: #FFFFFF !important;
-        border: 2px solid {INX_COLORS['neon_current']} !important;
-    }}
-    
-    /* Dropdown options */
-    [data-baseweb="popover"] {{
-        background-color: {INX_COLORS['musk_green']} !important;
-    }}
-    
-    [data-baseweb="popover"] * {{
-        color: #FFFFFF !important;
-    }}
-    
-    /* Tabs */
-    .stTabs [data-baseweb="tab-list"] {{
-        background-color: #000000;
-        border-radius: 8px;
-        border: 1px solid {INX_COLORS['neon_current']};
-    }}
-    
-    .stTabs [data-baseweb="tab"] {{
-        color: #FFFFFF;
-        background-color: transparent;
-    }}
-    
-    .stTabs [aria-selected="true"] {{
-        color: {INX_COLORS['neon_current']} !important;
-        border-bottom-color: {INX_COLORS['neon_current']} !important;
-    }}
-    
-    /* Info/success/warning boxes */
-    .stSuccess {{
-        background-color: rgba(18, 36, 30, 0.8);
-        border-left: 4px solid {INX_COLORS['neon_current']};
-        color: #FFFFFF !important;
-    }}
-    
-    .stInfo {{
-        background-color: rgba(18, 36, 30, 0.8);
-        border-left: 4px solid {INX_COLORS['neon_current']};
-        color: #FFFFFF !important;
-    }}
-    
-    .stWarning {{
-        background-color: rgba(18, 36, 30, 0.8);
-        border-left: 4px solid {INX_COLORS['neon_current']};
-        color: #FFFFFF !important;
-    }}
-    
-    .stError {{
-        background-color: rgba(18, 36, 30, 0.8);
-        border-left: 4px solid #FF4444;
-        color: #FFFFFF !important;
-    }}
-    
-    /* Download button */
-    .stDownloadButton>button {{
-        background-color: {INX_COLORS['neon_current']};
-        color: #000000;
-        border: none;
-        font-weight: 600;
-    }}
-    
-    /* Progress bar */
-    .stProgress > div > div {{
-        background-color: {INX_COLORS['neon_current']};
-    }}
-    
-    /* Dividers */
-    hr {{
-        border-color: {INX_COLORS['neon_current']} !important;
-        opacity: 0.3;
-    }}
-    
-    /* Checkbox */
-    .stCheckbox label {{
-        color: #FFFFFF !important;
-    }}
-    
-    /* Text elements */
-    p, span, div {{
-        color: #FFFFFF !important;
-    }}
-    
-    /* Plotly graphs - white background */
-    .js-plotly-plot {{
-        background-color: #FFFFFF !important;
-    }}
-    
-    /* Hide sidebar collapse button */
-    [data-testid="collapsedControl"] {{
-        display: none;
-    }}
-    
-    /* Logo fix - ensure proper display */
-    img {{
-        display: inline-block !important;
-        max-width: 100%;
     }}
 </style>
 """, unsafe_allow_html=True)
@@ -241,24 +62,23 @@ for key in ['raster_layers', 'hazards', 'turbines', 'sbp_lines', 'mag_tif_layer'
     if key not in st.session_state:
         st.session_state[key] = [] if key == 'raster_layers' else None
 
-# BRANDED HEADER WITH LOGO
+# BRANDED HEADER WITH LOGO FROM GOOGLE DRIVE
+# Replace FILE_ID with your actual Google Drive file ID
+LOGO_FILE_ID = "1A84a5D-19A-AeFcnb4elT3WxfSF5t-Em"  # Update this!
+
 st.markdown(f"""
-<div style='background: #000000; 
-            padding: 20px; border-radius: 12px; border: 2px solid {INX_COLORS['neon_current']};
-            margin-bottom: 20px; text-align: center; box-shadow: 0 4px 20px rgba(209, 254, 73, 0.2);'>
-    
+<div style='padding: 20px; margin-bottom: 20px; text-align: center;'>
     <div style='display: flex; justify-content: center; align-items: center; gap: 30px; flex-wrap: wrap;'>
-        <!-- InX Logo -->
-        <img src='https://raw.githubusercontent.com/aryaninx/grid/main/assets/INXTECH_Logo_Vertical-Light.png?v=1' 
-             style='height: 80px; width: auto; filter: drop-shadow(0 2px 10px rgba(209, 254, 73, 0.3));'
-             alt='InX Technologies'
-             onerror="this.style.display='none'">
+        <!-- InX Logo from Google Drive -->
+        <img src='https://drive.google.com/uc?export=view&id={LOGO_FILE_ID}' 
+             style='height: 80px; width: auto;'
+             alt='InX Technologies'>
         
         <div style='text-align: left;'>
-            <h1 style='color: {INX_COLORS['neon_current']}; margin: 0; font-size: 48px; font-weight: 700;'>
+            <h1 style='margin: 0; font-size: 48px; font-weight: 700;'>
                 ⚡ THE GRID
             </h1>
-            <p style='color: #FFFFFF; margin: 5px 0 0 0; font-size: 16px; letter-spacing: 2px;'>
+            <p style='color: #666; margin: 5px 0 0 0; font-size: 16px; letter-spacing: 2px;'>
                 MARINE HAZARD INTELLIGENCE PLATFORM
             </p>
         </div>
@@ -570,15 +390,7 @@ def generate_evidence(haz):
 # SIDEBAR - INX BRANDED
 # ==============================================================================
 
-st.sidebar.markdown(f"""
-<div style='text-align: center; padding: 15px; background: {INX_COLORS['neon_current']}; 
-            border-radius: 8px; margin-bottom: 20px;'>
-    <div style='color: #000000; font-weight: 700; font-size: 28px;'>InX</div>
-    <div style='color: #000000; font-size: 11px; letter-spacing: 1px;'>TECHNOLOGIES</div>
-</div>
-""", unsafe_allow_html=True)
-
-st.sidebar.header("🎨 Settings")
+st.sidebar.header("🎨 Display Settings")
 basemap = st.sidebar.selectbox("Basemap", ['OpenStreetMap', 'Esri Satellite'], index=1)
 mbes_cmap = st.sidebar.selectbox("MBES Colormap", ['ocean', 'viridis', 'seismic'], index=0)
 quality = st.sidebar.radio("Quality", ["Fast (500px)", "Good (1000px)", "High (2000px)"], index=1)
@@ -688,7 +500,7 @@ if st.sidebar.button("🗑️ Clear", use_container_width=True):
 # Financial dashboard
 if st.session_state.hazards is not None and len(st.session_state.hazards) > 0:
     st.sidebar.markdown("---")
-    st.sidebar.header("💰 Impact")
+    st.sidebar.header("💰 Project Impact")
     hazs = st.session_state.hazards
     def pc(s):
         try:
@@ -700,17 +512,11 @@ if st.session_state.hazards is not None and len(st.session_state.hazards) > 0:
     avg = costs.sum()
     crit = len(hazs[hazs['risk']=='Critical'])
     st.sidebar.metric("Mitigation Cost", f"£{avg/1000:.0f}K")
-    st.sidebar.metric("Critical", f"{crit}", delta="Immediate action")
+    st.sidebar.metric("Critical Hazards", f"{crit}", delta="Immediate action")
 
 st.sidebar.markdown("---")
-st.sidebar.markdown(f"""
-<div style='background: #000000; padding: 10px; border-radius: 8px; text-align: center; border: 1px solid {INX_COLORS['neon_current']};'>
-    <div style='color: {INX_COLORS['neon_current']}; font-weight: 600;'>✅ SYSTEM OPERATIONAL</div>
-    <div style='color: #FFFFFF; font-size: 11px;'>
-        📡 {datetime.now().strftime('%H:%M:%S')}
-    </div>
-</div>
-""", unsafe_allow_html=True)
+st.sidebar.success("✅ System Operational")
+st.sidebar.info(f"📡 Updated: {datetime.now().strftime('%H:%M:%S')}")
 
 
 # ==============================================================================
