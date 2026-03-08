@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 THE GRID - Marine Hazard Intelligence Platform
-MULTI-PAGE VERSION: Map | Timeline | Evidence Viewer
+InX Technologies Branded Version
 """
 
 import streamlit as st
@@ -26,27 +26,213 @@ from datetime import datetime, timedelta
 import plotly.figure_factory as ff
 import plotly.graph_objects as go
 
-st.set_page_config(page_title="The Grid", layout="wide", page_icon="⚡")
+# PAGE CONFIG - DARK MODE
+st.set_page_config(
+    page_title="The Grid | InX Technologies",
+    layout="wide",
+    page_icon="⚡",
+    initial_sidebar_state="expanded"
+)
+
+# INX COLOR PALETTE
+INX_COLORS = {
+    'deep_black': '#2E2E2E',
+    'musk_green': '#12241E',
+    'sage_green': '#8F998D',
+    'limitless_space': '#F2F2EF',
+    'rocky_blue': '#8288A3',
+    'precision_blue': '#0013C3',
+    'neon_current': '#D1FE49'
+}
+
+# CUSTOM CSS - DARK MODE + INX BRANDING
+st.markdown(f"""
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
+    
+    /* Global Font */
+    * {{
+        font-family: 'Space Grotesk', sans-serif !important;
+    }}
+    
+    /* Main background */
+    .stApp {{
+        background-color: {INX_COLORS['deep_black']};
+        color: {INX_COLORS['limitless_space']};
+    }}
+    
+    /* Sidebar */
+    [data-testid="stSidebar"] {{
+        background-color: {INX_COLORS['musk_green']};
+        border-right: 2px solid {INX_COLORS['neon_current']};
+    }}
+    
+    /* Sidebar text */
+    [data-testid="stSidebar"] * {{
+        color: {INX_COLORS['limitless_space']} !important;
+    }}
+    
+    /* Headers */
+    h1, h2, h3, h4, h5, h6 {{
+        color: {INX_COLORS['neon_current']} !important;
+        font-weight: 600 !important;
+    }}
+    
+    /* Buttons */
+    .stButton>button {{
+        background-color: {INX_COLORS['precision_blue']};
+        color: {INX_COLORS['limitless_space']};
+        border: 1px solid {INX_COLORS['neon_current']};
+        border-radius: 8px;
+        font-weight: 500;
+        transition: all 0.3s;
+    }}
+    
+    .stButton>button:hover {{
+        background-color: {INX_COLORS['neon_current']};
+        color: {INX_COLORS['deep_black']};
+        border-color: {INX_COLORS['neon_current']};
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(209, 254, 73, 0.3);
+    }}
+    
+    /* Radio buttons (page navigation) */
+    .stRadio > div {{
+        background-color: {INX_COLORS['musk_green']};
+        padding: 10px;
+        border-radius: 8px;
+        border: 1px solid {INX_COLORS['sage_green']};
+    }}
+    
+    .stRadio label {{
+        color: {INX_COLORS['limitless_space']} !important;
+        font-weight: 500 !important;
+    }}
+    
+    /* Metrics */
+    [data-testid="stMetricValue"] {{
+        color: {INX_COLORS['neon_current']} !important;
+        font-weight: 600 !important;
+    }}
+    
+    [data-testid="stMetricLabel"] {{
+        color: {INX_COLORS['sage_green']} !important;
+    }}
+    
+    /* Dataframes */
+    .dataframe {{
+        background-color: {INX_COLORS['musk_green']} !important;
+        color: {INX_COLORS['limitless_space']} !important;
+    }}
+    
+    /* Input widgets */
+    .stSelectbox, .stMultiSelect {{
+        background-color: {INX_COLORS['musk_green']};
+        color: {INX_COLORS['limitless_space']};
+    }}
+    
+    /* Tabs */
+    .stTabs [data-baseweb="tab-list"] {{
+        background-color: {INX_COLORS['musk_green']};
+        border-radius: 8px;
+    }}
+    
+    .stTabs [data-baseweb="tab"] {{
+        color: {INX_COLORS['sage_green']};
+        background-color: transparent;
+    }}
+    
+    .stTabs [aria-selected="true"] {{
+        color: {INX_COLORS['neon_current']} !important;
+        border-bottom-color: {INX_COLORS['neon_current']} !important;
+    }}
+    
+    /* Info/success/warning boxes */
+    .stSuccess {{
+        background-color: rgba(209, 254, 73, 0.1);
+        border-left: 4px solid {INX_COLORS['neon_current']};
+        color: {INX_COLORS['limitless_space']};
+    }}
+    
+    .stInfo {{
+        background-color: rgba(0, 19, 195, 0.1);
+        border-left: 4px solid {INX_COLORS['precision_blue']};
+        color: {INX_COLORS['limitless_space']};
+    }}
+    
+    .stWarning {{
+        background-color: rgba(209, 254, 73, 0.1);
+        border-left: 4px solid {INX_COLORS['neon_current']};
+        color: {INX_COLORS['limitless_space']};
+    }}
+    
+    /* Download button */
+    .stDownloadButton>button {{
+        background-color: {INX_COLORS['neon_current']};
+        color: {INX_COLORS['deep_black']};
+        border: none;
+        font-weight: 600;
+    }}
+    
+    /* Progress bar */
+    .stProgress > div > div {{
+        background-color: {INX_COLORS['neon_current']};
+    }}
+    
+    /* Dividers */
+    hr {{
+        border-color: {INX_COLORS['sage_green']} !important;
+        opacity: 0.3;
+    }}
+    
+    /* Checkbox */
+    .stCheckbox label {{
+        color: {INX_COLORS['limitless_space']} !important;
+    }}
+</style>
+""", unsafe_allow_html=True)
 
 # Session state
 for key in ['raster_layers', 'hazards', 'turbines', 'sbp_lines', 'mag_tif_layer']:
     if key not in st.session_state:
         st.session_state[key] = [] if key == 'raster_layers' else None
 
-# Branding
-st.markdown("""
-<div style='text-align:center; padding:10px; background:linear-gradient(90deg, #0066cc, #0099ff); border-radius:10px; margin-bottom:10px;'>
-    <h1 style='color:white; font-size:42px; margin:0;'>⚡ THE GRID</h1>
-    <p style='color:#e6f2ff; font-size:16px; margin:0;'>Marine Hazard Intelligence Platform</p>
+# BRANDED HEADER WITH LOGO PLACEHOLDER
+st.markdown(f"""
+<div style='background: linear-gradient(135deg, {INX_COLORS['musk_green']} 0%, {INX_COLORS['deep_black']} 100%); 
+            padding: 20px; border-radius: 12px; border: 2px solid {INX_COLORS['neon_current']};
+            margin-bottom: 20px; text-align: center; box-shadow: 0 4px 20px rgba(209, 254, 73, 0.2);'>
+    
+    <div style='display: flex; justify-content: center; align-items: center; gap: 30px;'>
+        <!-- InX Logo -->
+        <img src='https://raw.githubusercontent.com/aryaninx/grid/main/assets/INXTECH_Logo_Vertical-Light.png' 
+             style='height: 80px; filter: drop-shadow(0 2px 10px rgba(209, 254, 73, 0.3));'
+             alt='InX Technologies'>
+        
+        <div>
+            <h1 style='color: {INX_COLORS['neon_current']}; margin: 0; font-size: 48px; font-weight: 700;'>
+                ⚡ THE GRID
+            </h1>
+            <p style='color: {INX_COLORS['sage_green']}; margin: 5px 0 0 0; font-size: 16px; letter-spacing: 2px;'>
+                MARINE HAZARD INTELLIGENCE PLATFORM
+            </p>
+        </div>
+    </div>
 </div>
 """, unsafe_allow_html=True)
 
-# PAGE NAVIGATION
-page = st.radio("", ["🗺️ Hazard Map", "📅 Project Timeline", "🔬 Evidence Viewer"], horizontal=True)
+# PAGE NAVIGATION with InX styling
+page = st.radio(
+    "",
+    ["🗺️ Hazard Map", "📅 Project Timeline", "🔬 Evidence Viewer"],
+    horizontal=True,
+    label_visibility="collapsed"
+)
+
 st.markdown("---")
 
 # ==============================================================================
-# FUNCTIONS
+# FUNCTIONS (SAME AS BEFORE)
 # ==============================================================================
 
 def download_from_gdrive(file_id, output_path):
@@ -134,10 +320,17 @@ def tif_to_png_base64(file_path, colormap='gray', max_size=1000, is_sss=False, i
         return None, None
 
 def get_risk_color(risk):
-    return {'Critical': '#DC143C', 'High': '#FF8C00', 'Medium': '#FFD700', 'Low': '#90EE90'}.get(risk, '#808080')
+    """Get InX-branded colors for risk levels"""
+    colors = {
+        'Critical': '#D1FE49',  # Neon current
+        'High': '#0013C3',      # Precision blue
+        'Medium': '#8F998D',    # Sage green
+        'Low': '#8288A3'        # Rocky blue
+    }
+    return colors.get(risk, '#F2F2EF')
 
 def create_timeline_gantt(hazards_gdf, scenario='original'):
-    """Create Gantt chart - original vs with hazards"""
+    """Create Gantt chart with InX branding"""
     start_date = datetime(2024, 1, 1)
     
     if scenario == 'original':
@@ -158,7 +351,6 @@ def create_timeline_gantt(hazards_gdf, scenario='original'):
         critical = len(hazards_gdf[hazards_gdf['risk'] == 'Critical'])
         high = len(hazards_gdf[hazards_gdf['risk'] == 'High'])
         medium = len(hazards_gdf[hazards_gdf['risk'] == 'Medium'])
-        low = len(hazards_gdf[hazards_gdf['risk'] == 'Low'])
         
         phases = []
         curr = 0
@@ -204,18 +396,25 @@ def create_timeline_gantt(hazards_gdf, scenario='original'):
         
         financial_markers = []
         if critical > 0:
-            financial_markers.append({'month': 7, 'cost': cost_crit, 'label': f'Critical: £{cost_crit/1000:.0f}K', 'color': '#DC143C'})
+            financial_markers.append({'month': 7, 'cost': cost_crit, 'label': f'Critical: £{cost_crit/1000:.0f}K', 'color': '#D1FE49'})
         if high > 0:
-            financial_markers.append({'month': 12, 'cost': cost_high, 'label': f'High: £{cost_high/1000:.0f}K', 'color': '#FF8C00'})
+            financial_markers.append({'month': 12, 'cost': cost_high, 'label': f'High: £{cost_high/1000:.0f}K', 'color': '#0013C3'})
         if medium > 0:
-            financial_markers.append({'month': 18, 'cost': cost_med, 'label': f'Medium: £{cost_med/1000:.0f}K', 'color': '#FFD700'})
+            financial_markers.append({'month': 18, 'cost': cost_med, 'label': f'Medium: £{cost_med/1000:.0f}K', 'color': '#8F998D'})
     
     for p in phases:
         p['Start'] = start_date + timedelta(days=p['Start']*30)
         p['Finish'] = p['Start'] + timedelta(days=p['Duration']*30)
     
-    colors = {'Survey': 'rgb(46,137,205)', 'Analysis': 'rgb(114,44,121)', 'Resurvey': 'rgb(220,20,60)',
-              'Engineering': 'rgb(58,149,136)', 'Planning': 'rgb(107,127,135)', 'Construction': 'rgb(50,171,96)'}
+    # InX color scheme for phases
+    colors = {
+        'Survey': '#0013C3',      # Precision blue
+        'Analysis': '#12241E',    # Musk green
+        'Resurvey': '#D1FE49',    # Neon current
+        'Engineering': '#8288A3', # Rocky blue
+        'Planning': '#8F998D',    # Sage green
+        'Construction': '#0013C3' # Precision blue
+    }
     
     fig = ff.create_gantt(phases, colors=colors, index_col='Resource', show_colorbar=True, group_tasks=True,
                          title=f"Timeline - {scenario.replace('_',' ').title()}")
@@ -224,19 +423,25 @@ def create_timeline_gantt(hazards_gdf, scenario='original'):
         for m in financial_markers:
             m_date = start_date + timedelta(days=m['month']*30)
             fig.add_trace(go.Scatter(x=[m_date,m_date], y=[0,len(phases)], mode='lines+text',
-                                    line=dict(color=m['color'], width=2, dash='dash'),
+                                    line=dict(color=m['color'], width=3, dash='dash'),
                                     text=[m['label'],''], textposition='top center', showlegend=False))
     
-    fig.update_layout(height=500, xaxis_title="Timeline", yaxis_title="Phase")
+    # Dark theme for Gantt
+    fig.update_layout(
+        height=500,
+        plot_bgcolor='#2E2E2E',
+        paper_bgcolor='#12241E',
+        font=dict(color='#F2F2EF', family='Space Grotesk'),
+        xaxis=dict(gridcolor='#8F998D', gridwidth=0.5),
+        yaxis=dict(gridcolor='#8F998D', gridwidth=0.5)
+    )
     return fig, total_months, financial_markers if scenario=='with_hazards' else []
 
 def generate_evidence(haz):
-    """Generate evidence for hazard"""
+    """Generate evidence - same as before"""
     hid = haz.get('id','')
-    htype = haz.get('hazard_type','')
     sensors = haz.get('detected_by','').split(', ')
     
-    # Change detection scenarios
     changes = {
         'WRK-001': {'prev': 'Mar 2023', 'list': [
             '**Elevation:** 2.1m → 3.8m (+1.7m increase)',
@@ -270,8 +475,9 @@ def generate_evidence(haz):
     }
     
     change_data = changes.get(hid, changes['default'])
-    
     ev = {'sss': '', 'mbes': '', 'mag': '', 'sbp': '', 'risk_just': '', 'change': change_data}
+    
+    htype = haz.get('hazard_type', '')
     
     if 'SSS' in sensors:
         if 'Wreck' in htype:
@@ -315,11 +521,19 @@ def generate_evidence(haz):
 
 
 # ==============================================================================
-# SIDEBAR - DATA LOADING (SAME FOR ALL PAGES)
+# SIDEBAR - INX BRANDED
 # ==============================================================================
 
+st.sidebar.markdown(f"""
+<div style='text-align: center; padding: 15px; background: {INX_COLORS['neon_current']}; 
+            border-radius: 8px; margin-bottom: 20px;'>
+    <div style='color: {INX_COLORS['deep_black']}; font-weight: 700; font-size: 28px;'>InX</div>
+    <div style='color: {INX_COLORS['deep_black']}; font-size: 11px; letter-spacing: 1px;'>TECHNOLOGIES</div>
+</div>
+""", unsafe_allow_html=True)
+
 st.sidebar.header("🎨 Settings")
-basemap = st.sidebar.selectbox("Basemap", ['OpenStreetMap', 'Esri Satellite'], index=0)
+basemap = st.sidebar.selectbox("Basemap", ['OpenStreetMap', 'Esri Satellite'], index=1)
 mbes_cmap = st.sidebar.selectbox("MBES Colormap", ['ocean', 'viridis', 'seismic'], index=0)
 quality = st.sidebar.radio("Quality", ["Fast (500px)", "Good (1000px)", "High (2000px)"], index=1)
 max_px = {"Fast (500px)": 500, "Good (1000px)": 1000, "High (2000px)": 2000}[quality]
@@ -330,7 +544,7 @@ FILE_IDS = {
     'mag': '1jyYQ9ICEFjXxFAatFQvGb-9byu3ryq5P',
     'turbines': '18uYbX7OWZcqQfoBow6F_P4AmjptioeeO',
     'sbp': '1cZCoNX1t68X1BoiyikYKRAV0vzo_3pGO',
-    'hazards': '1x_aerOM_LY7bw1CJdNC35zD2KkhJo4Sh'
+    'hazards': '1h3FUT5DYj3OAM3o3OtTUm-TmjCCoj8hM'
 }
 
 st.sidebar.markdown("---")
@@ -425,7 +639,7 @@ if st.sidebar.button("🗑️ Clear", use_container_width=True):
     st.session_state.mag_tif_layer = None
     st.rerun()
 
-# Financial dashboard (all pages)
+# Financial dashboard
 if st.session_state.hazards is not None and len(st.session_state.hazards) > 0:
     st.sidebar.markdown("---")
     st.sidebar.header("💰 Impact")
@@ -443,9 +657,22 @@ if st.session_state.hazards is not None and len(st.session_state.hazards) > 0:
     st.sidebar.metric("Critical", f"{crit}", delta="Immediate action")
 
 st.sidebar.markdown("---")
-st.sidebar.success("✅ System: Operational")
-st.sidebar.info(f"📡 Updated: {datetime.now().strftime('%H:%M:%S')}")
+st.sidebar.markdown(f"""
+<div style='background: {INX_COLORS['precision_blue']}; padding: 10px; border-radius: 8px; text-align: center;'>
+    <div style='color: {INX_COLORS['neon_current']}; font-weight: 600;'>✅ SYSTEM OPERATIONAL</div>
+    <div style='color: {INX_COLORS['limitless_space']}; font-size: 11px;'>
+        📡 {datetime.now().strftime('%H:%M:%S')}
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
+
+# ==============================================================================
+# PAGES - Same structure as before, now with InX branding
+# ==============================================================================
+
+# Copy the full page implementations from app_MULTIPAGE_FINAL.py
+# Starting from line 449 to the end
 
 # ==============================================================================
 # PAGE 1: HAZARD MAP
