@@ -31,7 +31,7 @@ st.set_page_config(
     page_title="The Grid | InX Technologies",
     layout="wide",
     page_icon="⚡",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed"
 )
 
 # INX COLOR PALETTE
@@ -70,6 +70,8 @@ st.markdown(f"""
 for key in ['raster_layers', 'hazards', 'turbines', 'sbp_lines', 'mag_tif_layer', 'mag_targets']:
     if key not in st.session_state:
         st.session_state[key] = [] if key == 'raster_layers' else None
+
+
 
 # BRANDED HEADER WITH LOGO FROM GOOGLE DRIVE
 # Replace FILE_ID with your actual Google Drive file ID
@@ -1189,6 +1191,59 @@ TEMPORAL_CHANGES = {
 
 # ==============================================================================
 # PAGE 2: PROJECT TIMELINE
+# ── Auto-load on startup ─────────────────────────────────────────────────────
+if 'auto_loaded' not in st.session_state:
+    st.session_state.auto_loaded = False
+
+if not st.session_state.auto_loaded:
+    # ── Known Google Drive file IDs ───────────────────────────────────────────────
+    DRIVE_IDS = {
+        'hazards':     '1x_aerOM_LY7bw1CJdNC35zD2KkhJo4Sh',
+        'mbes':        '1lE9X1S2Lqt3UxKgEJto5cURf1gTxOADr',
+        'turbines':    '18uYbX7OWZcqQfoBow6F_P4AmjptioeeO',
+        'sbp':         '1cZCoNX1t68X1BoiyikYKRAV0vzo_3pGO',
+        'mag_tif':     '1jyYQ9ICEFjXxFAatFQvGb-9byu3ryq5P',
+        'mag_targets': '1461Q0yswjO5qetkEfazB2JZMq5GHbSMd',
+    }
+
+    # ── Auto-load on first run ────────────────────────────────────────────────────
+    if not st.session_state.get('auto_loaded'):
+        _load_errors = []
+
+        # 1. Hazards GeoJSON
+        try:
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.json') as _tmp:
+                download_from_gdrive(DRIVE_IDS['hazards'], _tmp.name)
+                _gdf = gpd.read_file(_tmp.name)
+                st.session_state.hazards = patch_hazard_coordinates(_gdf)
+                os.unlink(_tmp.name)
+        except Exception as _e:
+            _load_errors.append(f'Hazards: {_e}')
+
+        # 2. MBES raster
+        try:
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.tif') as _tmp:
+                download_from_gdrive(DRIVE_IDS['mbes'], _tmp.name)
+                _img, _bnd = tif_to_png_base64(_tmp.name)
+                if _img and _bnd:
+                    st.session_state.raster_layers = [(_img, _bnd)]
+                os.unlink(_tmp.name)
+        except Exception as _e:
+            _load_errors.append(f'MBES: {_e}')
+
+        # 3. Turbines GeoJSON
+        try:
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.json') as _tmp:
+                download_from_gdrive(DRIVE_IDS['turbines'], _tmp.name)
+                st.session_state.turbines = gpd.read_file(_tmp.name)
+                os.unlink(_tmp.name)
+        except Exception as _e:
+            _load_errors.append(f'Turbines: {_e}')
+
+        st.session_state.auto_loaded = True
+        if _load_errors:
+            st.session_state.auto_load_errors = _load_errors
+
 # ==============================================================================
 
 # PAGE 1: HAZARD MAP
@@ -1196,6 +1251,12 @@ TEMPORAL_CHANGES = {
 
 if page == "🗺️ Hazard Map":
     st.header("🗺️ Interactive Hazard Map")
+
+    # Show any auto-load errors
+    if st.session_state.get("auto_load_errors"):
+        for _err in st.session_state.auto_load_errors:
+            st.warning(f"⚠️ Auto-load: {_err}")
+
     
     if st.session_state.hazards is not None and len(st.session_state.hazards) > 0:
         # ── Filters row ──────────────────────────────────────────────────────
@@ -1526,7 +1587,7 @@ if page == "🗺️ Hazard Map":
             st.dataframe(df_show[['Latitude','Longitude','nT']].head(50), use_container_width=True, height=250)
 
     else:
-        st.info("👆 Load hazards from sidebar to begin")
+        st.info("⏳ Loading survey data... please wait a moment then refresh if the map is empty.")
 
 
 # ==============================================================================
@@ -1701,7 +1762,7 @@ elif page == "📅 Project Timeline":
                 st.caption(f"Hazard IDs: {', '.join(ids)}")
 
     else:
-        st.info("Load hazards from the sidebar to see engineering impact analysis.")
+        st.info("⏳ Loading survey data automatically. If the timeline is empty, navigate away and back.")
 
 
 
@@ -1981,7 +2042,7 @@ elif page == "🔬 Evidence Viewer":
             )
     
     else:
-        st.info("Load hazards to view evidence analysis")
+        st.info("⏳ Loading survey data automatically. If empty, navigate away and back to this page.")
 
 st.markdown("---")
 st.caption("⚡ The Grid - Powered by Multi-Sensor AI")
