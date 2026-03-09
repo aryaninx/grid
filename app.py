@@ -80,7 +80,7 @@ LOGO_FILE_ID = "1A84a5D-19A-AeFcnb4elT3WxfSF5t-Em"  # Update with your actual Fi
 st.markdown(f"""
 <div style='padding: 10px 20px; margin-bottom: 20px;'>
     <div style='display: flex; align-items: center; gap: 20px;'>
-        <img src='https://drive.google.com/uc?export=view&id={LOGO_FILE_ID}' 
+        <img src='https://drive.google.com/thumbnail?id={LOGO_FILE_ID}&sz=w200' 
              style='height: 60px; width: auto;'
              alt='InX Tech'
              onerror="this.style.display='none'">
@@ -94,7 +94,7 @@ st.markdown(f"""
 # PAGE NAVIGATION with InX styling
 page = st.radio(
     "",
-    ["🗺️ Hazard Map", "📅 Project Timeline", "🔬 Evidence Viewer"],
+    ["Hazard Map", "Project Timeline", "Evidence Viewer"],
     horizontal=True,
     label_visibility="collapsed"
 )
@@ -605,15 +605,48 @@ RISK_ZONES_DEF = [
      'confidence':'Moderate','conf_note':'Channel wall slope from MBES — limited SBP crossing data available'},
 ]
 def get_risk_zones_gdf():
-    """Convert RISK_ZONES_DEF to a GeoDataFrame."""
-    from shapely.geometry import box as sbox
+    """Convert RISK_ZONES_DEF to a GeoDataFrame using pre-clipped polygon coords."""
+    from shapely.geometry import Polygon
     import geopandas as _gpd
+
+    # Pre-clipped polygon vertices (lon, lat) — computed by Sutherland-Hodgman
+    # against the survey boundary so no zone overhangs the survey area edges
+    CLIPPED_COORDS = {
+        'RZ-C1':  [(-0.009, 53.775156), (-0.009, 53.773), (0.02, 53.773), (0.02, 53.778478)],
+        'RZ-C2':  [(0.02, 53.778478), (0.02, 53.774), (0.033513, 53.774), (0.055, 53.776269), (0.055, 53.782486)],
+        'RZ-C3':  [(0.055, 53.782486), (0.055, 53.776269), (0.09, 53.779965), (0.09, 53.786495)],
+        'RZ-C4':  [(0.09, 53.786495), (0.09, 53.779965), (0.114, 53.7825), (0.114, 53.789), (0.11187, 53.789)],
+        'RZ-SW1': [(0.114, 53.788318), (0.129534, 53.774), (0.138, 53.774), (0.138, 53.796), (0.114, 53.796)],
+        'RZ-SW2': [(0.11, 53.797), (0.125, 53.797), (0.125, 53.806), (0.11, 53.806)],
+        'RZ-SW3': [(0.095, 53.80583), (0.10675, 53.795), (0.115, 53.795), (0.115, 53.808), (0.095, 53.808)],
+        'RZ-SW4': [(0.097, 53.803987), (0.101326, 53.8), (0.12, 53.8), (0.12, 53.812), (0.097, 53.812)],
+        'RZ-C5':  [(0.14, 53.8), (0.156, 53.8), (0.156, 53.809), (0.14, 53.809)],
+        'RZ-C6':  [(0.135, 53.809), (0.156, 53.809), (0.156, 53.818), (0.135, 53.818)],
+        'RZ-C7':  [(0.156, 53.806), (0.177, 53.806), (0.177, 53.815), (0.156, 53.815)],
+        'RZ-C8':  [(0.127, 53.798), (0.142, 53.798), (0.142, 53.808), (0.127, 53.808)],
+        'RZ-C9':  [(0.095, 53.818373), (0.095, 53.808), (0.118, 53.808), (0.118, 53.82), (0.099226, 53.82)],
+        'RZ-C10': [(0.099, 53.819913), (0.099, 53.818), (0.122, 53.818), (0.122, 53.828), (0.120002, 53.828)],
+        'RZ-NE1': [(0.152, 53.824), (0.167, 53.824), (0.167, 53.835), (0.152, 53.835)],
+        'RZ-NE2': [(0.133, 53.833005), (0.133, 53.828), (0.153, 53.828), (0.153, 53.84), (0.151167, 53.84)],
+        'RZ-NE3': [(0.155, 53.82), (0.177, 53.82), (0.177, 53.828912), (0.17266, 53.833), (0.155, 53.833)],
+        'RZ-SE1': [(0.158, 53.775), (0.165779, 53.775), (0.188, 53.784067), (0.188, 53.786), (0.158, 53.786)],
+        'RZ-SE2': [(0.145, 53.782), (0.167, 53.782), (0.167, 53.797), (0.145, 53.797)],
+        'RZ-SE3': [(0.168, 53.786), (0.19, 53.786), (0.19, 53.797), (0.168, 53.797)],
+        'RZ-SE4': [(0.178, 53.786), (0.192738, 53.786), (0.205, 53.791004), (0.205, 53.793), (0.178, 53.793)],
+        'RZ-SE5': [(0.175, 53.798), (0.2, 53.798), (0.2, 53.80725), (0.19708, 53.81), (0.175, 53.81)],
+        'RZ-SE6': [(0.14, 53.766), (0.143722, 53.766), (0.157, 53.771418), (0.157, 53.778), (0.14, 53.778)],
+        'RZ-SE7': [(0.118, 53.812), (0.138, 53.812), (0.138, 53.823), (0.118, 53.823)],
+    }
+
     rows = []
     for z in RISK_ZONES_DEF:
-        s, n, w, e = z['bbox']
+        zid = z['id']
+        coords = CLIPPED_COORDS.get(zid)
+        if not coords or len(coords) < 3:
+            continue
         rows.append({
-            'geometry':   sbox(w, s, e, n),
-            'cell_id':    z['id'],
+            'geometry':   Polygon(coords),
+            'cell_id':    zid,
             'label':      z['label'],
             'score':      z['score'],
             'drivers':    z['drivers'],
@@ -914,7 +947,7 @@ def create_timeline_gantt(hazards_gdf, view='before'):
 
         # Extension bar (hazard delay) shown in orange
         if view == 'after' and p['ext'] > 0:
-            ext_hover = (f"<b>⚠️ Hazard Delay: {p['task']}</b><br>"
+            ext_hover = (f"<b>Hazard Delay: {p['task']}</b><br>"
                          f"+{p['ext']:.1f} months from {crit}C/{high}H/{med}M/{low}L hazards")
             fig.add_trace(go.Bar(
                 name=f"{p['task']} delay",
@@ -1314,14 +1347,14 @@ FILE_IDS = {
     'mag_targets': '1461Q0yswjO5qetkEfazB2JZMq5GHbSMd',
 }
 
-st.sidebar.header("⚙️ Data Layers")
+st.sidebar.header("Data Layers")
 basemap   = st.sidebar.selectbox("Basemap", ['Esri Satellite', 'OpenStreetMap'], index=0)
 mbes_cmap = st.sidebar.selectbox("MBES Colormap", ['ocean', 'viridis', 'seismic'], index=0)
 quality   = st.sidebar.radio("Quality", ["Fast (500px)", "Good (1000px)", "High (2000px)"], index=1)
 max_px    = {"Fast (500px)": 500, "Good (1000px)": 1000, "High (2000px)": 2000}[quality]
 
 st.sidebar.markdown("---")
-st.sidebar.header("📂 Quick Load")
+st.sidebar.header("Quick Load")
 
 if st.sidebar.button("Load MBES", use_container_width=True):
     with st.spinner("Downloading MBES..."):
@@ -1427,7 +1460,7 @@ if st.sidebar.button("Load SBP", use_container_width=True):
             except Exception as e:
                 st.sidebar.error(f"Error: {e}")
 
-if st.sidebar.button("🗑️ Clear All", use_container_width=True):
+if st.sidebar.button("Clear All", use_container_width=True):
     st.session_state.raster_layers = []
     st.session_state.hazards       = None
     st.session_state.turbines      = None
@@ -1441,14 +1474,14 @@ if st.session_state.hazards is not None:
     crit_n = len(hazs[hazs['risk']=='Critical'])
     high_n = len(hazs[hazs['risk']=='High'])
     st.sidebar.markdown("---")
-    st.sidebar.header("📊 Project Impact")
+    st.sidebar.header("Project Impact")
     st.sidebar.metric("Critical Hazards", crit_n, delta="Immediate action" if crit_n else None)
     st.sidebar.metric("High Risk",        high_n, delta="Engineering uplift" if high_n else None)
     st.sidebar.metric("Total Hazards",    len(hazs))
 
 st.sidebar.markdown("---")
-st.sidebar.success("✅ System Operational")
-st.sidebar.caption(f"📡 {datetime.now().strftime('%d %b %Y  %H:%M')}")
+st.sidebar.success("System Operational")
+st.sidebar.caption(f"{datetime.now().strftime('%d %b %Y  %H:%M')}")
 
 
 # ==============================================================================
@@ -1456,13 +1489,13 @@ st.sidebar.caption(f"📡 {datetime.now().strftime('%d %b %Y  %H:%M')}")
 # PAGE 1: HAZARD MAP
 # ==============================================================================
 
-if page == "🗺️ Hazard Map":
-    st.header("🗺️ Interactive Hazard Map")
+if page == "Hazard Map":
+    st.header("Interactive Hazard Map")
 
     # Show any auto-load errors
     if st.session_state.get("auto_load_errors"):
         for _err in st.session_state.auto_load_errors:
-            st.warning(f"⚠️ Auto-load: {_err}")
+            st.warning(f"Auto-load: {_err}")
 
     
     if st.session_state.hazards is not None and len(st.session_state.hazards) > 0:
@@ -1493,7 +1526,7 @@ if page == "🗺️ Hazard Map":
             nt_col1, nt_col2 = st.columns([2,1])
             with nt_col1:
                 nt_band = st.select_slider(
-                    "🧲 nT Anomaly Threshold — show targets above:",
+                    "nT Anomaly Threshold — show targets above:",
                     options=[5, 10, 20, 50, 100, 200, 500],
                     value=5,
                     key='nt_thresh'
@@ -1512,11 +1545,11 @@ if page == "🗺️ Hazard Map":
 
         # ── Metrics ──────────────────────────────────────────────────────────
         col1, col2, col3, col4, col5 = st.columns(5)
-        col1.metric("🔴 Critical", len(filtered[filtered['risk']=='Critical']))
-        col2.metric("🟠 High",     len(filtered[filtered['risk']=='High']))
-        col3.metric("🟡 Medium",   len(filtered[filtered['risk']=='Medium']))
-        col4.metric("🟢 Low",      len(filtered[filtered['risk']=='Low']))
-        col5.metric("📍 Total",    len(filtered))
+        col1.metric("Critical", len(filtered[filtered['risk']=='Critical']))
+        col2.metric("High",     len(filtered[filtered['risk']=='High']))
+        col3.metric("Medium",   len(filtered[filtered['risk']=='Medium']))
+        col4.metric("Low",      len(filtered[filtered['risk']=='Low']))
+        col5.metric("Total",    len(filtered))
 
         # ── Map centre ───────────────────────────────────────────────────────
         all_bounds = [b for _, b in st.session_state.raster_layers if b]
@@ -1589,7 +1622,7 @@ if page == "🗺️ Hazard Map":
                         turbine_popup = f"""
                         <div style="width:280px; font-family:Arial; font-size:13px;">
                             <h3 style="margin:0; padding:8px 10px; background:#0013C3; color:white; border-radius:5px 5px 0 0;">
-                                🌀 Turbine {tref}
+                                Turbine {tref}
                             </h3>
                             <div style="padding:10px;">
                                 <p style="margin:4px 0;"><b>Ref / Name:</b> {tref}</p>
@@ -1638,7 +1671,7 @@ if page == "🗺️ Hazard Map":
                     popup_t = f"""
                     <div style="width:200px; font-family:Arial; font-size:12px;">
                         <h4 style="margin:0; padding:6px 8px; background:{c}; color:white; border-radius:4px 4px 0 0;">
-                            🧲 Mag Anomaly
+                            Mag Anomaly
                         </h4>
                         <div style="padding:8px;">
                             <p style="margin:3px 0;"><b>Amplitude:</b> {nt_val:.1f} nT</p>
@@ -1651,7 +1684,7 @@ if page == "🗺️ Hazard Map":
                         [lat, lon], radius=radius,
                         color=c, fill=True, fillColor=c, fillOpacity=0.75, weight=1,
                         popup=folium.Popup(popup_t, max_width=220),
-                        tooltip=f"🧲 {nt_val:.1f} nT"
+                        tooltip=f"{nt_val:.1f} nT"
                     ).add_to(mag_t_group)
                 mag_t_group.add_to(m)
             except Exception as e:
@@ -1708,29 +1741,37 @@ if page == "🗺️ Hazard Map":
                             nt_val = float(pin_nt)
                             nt_info = f"""
                             <div style="margin:8px 0; padding:8px; background:#fff8e1; border-left:4px solid #FF8C00; border-radius:0 5px 5px 0;">
-                                <p style="margin:2px 0; font-weight:bold; color:#c45000;">🧲 Magnetometer: {nt_val:,.1f} nT</p>
+                                <p style="margin:2px 0; font-weight:bold; color:#c45000;">Magnetometer: {nt_val:,.1f} nT</p>
                                 <p style="margin:2px 0; font-size:11px; color:#555;">{pin_note}</p>
                             </div>
                             """
                         except:
                             pass
 
+                # Title text colour: black on light colours (Critical), white on dark
+                _title_text = '#1a1a1a' if risk == 'Critical' else 'white'
+                # Risk badge accent colour for border only — text always dark
+                _risk_accent = {'Critical':'#b8d900','High':'#0013C3','Medium':'#6a7a68','Low':'#5a6080'}.get(risk,'#888')
+                _risk_label  = {'Critical':'CRITICAL','High':'HIGH','Medium':'MEDIUM','Low':'LOW'}.get(risk, risk)
+
                 popup_html = f"""
-                <div style="width:360px; font-family:Arial; font-size:13px;">
-                    <h3 style="margin:0; padding:10px; background:{get_risk_color(risk)}; color:white; border-radius:5px 5px 0 0;">
-                        {htype} - {row.get('id','')}
-                    </h3>
-                    <div style="padding:10px;">
-                        <p style="margin:5px 0;"><b>Name:</b> {row.get('name','N/A')}</p>
-                        <p style="margin:5px 0;"><b>Size:</b> {row.get('size','N/A')}</p>
-                        <div style="margin:10px 0; padding:8px; background:#f0f0f0; border-radius:5px;">
-                            <p style="margin:0;"><b>📡 Detected:</b> {row.get('detected_by','N/A')}</p>
-                        </div>
-                        <p style="margin:5px 0;"><b>📏 Distance:</b> {dist_str}</p>
+                <div style="width:340px; font-family:Arial, sans-serif; font-size:13px; color:#1a1a1a; line-height:1.5;">
+                    <div style="margin:0; padding:10px 14px; background:{get_risk_color(risk)}; border-radius:6px 6px 0 0;">
+                        <div style="font-size:15px; font-weight:700; color:{_title_text};">{htype}</div>
+                        <div style="font-size:11px; color:{_title_text}; opacity:0.85;">ID: {row.get('id','')}</div>
+                    </div>
+                    <div style="padding:12px 14px; background:white;">
+                        <table style="width:100%; border-collapse:collapse; font-size:12px;">
+                            <tr><td style="padding:4px 0; color:#555; width:90px;">Name</td><td style="padding:4px 0; font-weight:600; color:#1a1a1a;">{row.get('name','N/A')}</td></tr>
+                            <tr><td style="padding:4px 0; color:#555;">Size</td><td style="padding:4px 0; color:#1a1a1a;">{row.get('size','N/A')}</td></tr>
+                            <tr><td style="padding:4px 0; color:#555;">📡 Sensors</td><td style="padding:4px 0; color:#1a1a1a;">{row.get('detected_by','N/A')}</td></tr>
+                            <tr><td style="padding:4px 0; color:#555;">📏 Distance</td><td style="padding:4px 0; color:#1a1a1a;">{dist_str}</td></tr>
+                        </table>
                         {nt_info}
-                        <div style="margin:10px 0; padding:8px; background:#fff3cd; border-radius:5px;">
-                            <p style="margin:2px 0;"><b>⚠️ Risk:</b> <span style="color:{get_risk_color(risk)}; font-weight:bold;">{risk}</span></p>
-                            <p style="margin:2px 0;"><b>Score:</b> {row.get('risk_score','N/A')}/10</p>
+                        <div style="margin:10px 0 6px 0; padding:8px 10px; background:#f7f7f7; border-left:4px solid {_risk_accent}; border-radius:0 4px 4px 0;">
+                            <span style="font-size:11px; color:#555; text-transform:uppercase; letter-spacing:0.5px;">Risk Level</span><br>
+                            <span style="font-size:14px; font-weight:700; color:#1a1a1a;">{_risk_label}</span>
+                            &nbsp;<span style="font-size:12px; color:#444;">Score: {row.get('risk_score','N/A')}/10</span>
                         </div>
                 """
 
@@ -1738,24 +1779,25 @@ if page == "🗺️ Hazard Map":
                     sensors = row.get('detected_by', '').split(', ')
                     nsens   = len([s for s in sensors if s.strip()])
                     popup_html += f"""
-                        <div style="margin:10px 0; padding:10px; background:#e8f4f8; border-radius:5px; border-left:4px solid #0066cc;">
-                            <h4 style="margin:0 0 8px 0; color:#0066cc;">🤖 GRID AI Detection</h4>
+                        <div style="margin:8px 0 4px 0; padding:8px 10px; background:#f0f4ff; border-left:4px solid #0013C3; border-radius:0 4px 4px 0;">
+                            <div style="font-size:12px; font-weight:700; color:#0013C3; margin-bottom:5px;">🤖 GRID AI Detection</div>
                     """
-                    if 'SSS'          in row.get('detected_by',''): popup_html += '<p style="margin:3px 0; font-size:11px;">✅ SSS: Target confirmed | 95%</p>'
-                    if 'MBES'         in row.get('detected_by',''): popup_html += '<p style="margin:3px 0; font-size:11px;">✅ MBES: Elevation anomaly | 88%</p>'
-                    if 'Magnetometer' in row.get('detected_by',''): popup_html += '<p style="margin:3px 0; font-size:11px;">✅ Mag: Ferrous signature | 92%</p>'
-                    if 'SBP'          in row.get('detected_by',''): popup_html += '<p style="margin:3px 0; font-size:11px;">✅ SBP: Subsurface anomaly | 85%</p>'
+                    if 'SSS'          in row.get('detected_by',''): popup_html += '<div style="font-size:11px; color:#1a1a1a; margin:2px 0;">✅ SSS: Target confirmed | 95%</div>'
+                    if 'MBES'         in row.get('detected_by',''): popup_html += '<div style="font-size:11px; color:#1a1a1a; margin:2px 0;">✅ MBES: Elevation anomaly | 88%</div>'
+                    if 'Magnetometer' in row.get('detected_by',''): popup_html += '<div style="font-size:11px; color:#1a1a1a; margin:2px 0;">✅ Mag: Ferrous signature | 92%</div>'
+                    if 'SBP'          in row.get('detected_by',''): popup_html += '<div style="font-size:11px; color:#1a1a1a; margin:2px 0;">✅ SBP: Subsurface anomaly | 85%</div>'
                     popup_html += f"""
-                            <div style="margin-top:8px; padding-top:8px; border-top:1px solid #ccc;">
-                                <p style="margin:2px 0; font-size:11px;"><b>Combined Confidence:</b> 91%</p>
-                                <p style="margin:2px 0; font-size:11px;"><b>Agreement:</b> {nsens}/4 sensors</p>
+                            <div style="margin-top:6px; padding-top:6px; border-top:1px solid #ccd5f0; font-size:11px; color:#1a1a1a;">
+                                <b>Combined Confidence:</b> 91% &nbsp;·&nbsp; <b>Agreement:</b> {nsens}/4 sensors
                             </div>
                         </div>
                     """
 
                 popup_html += f"""
-                        <p style="margin:5px 0;"><b>💰 Cost:</b> {row.get('cost','N/A')}</p>
-                        <p style="margin:5px 0;"><b>📅 Timeline:</b> {row.get('investigation_timeline','N/A')}</p>
+                        <div style="margin-top:8px; padding-top:8px; border-top:1px solid #eee; font-size:12px; color:#1a1a1a;">
+                            <div style="margin:3px 0;"><b>💰 Cost:</b> {row.get('cost','N/A')}</div>
+                            <div style="margin:3px 0;"><b>📅 Timeline:</b> {row.get('investigation_timeline','N/A')}</div>
+                        </div>
                     </div>
                 </div>
                 """
@@ -1770,21 +1812,22 @@ if page == "🗺️ Hazard Map":
 
         folium.plugins.Fullscreen().add_to(m)
         folium.plugins.MousePosition(position='bottomright', separator=' | ', prefix='📍', lat_formatter='function(num) {return L.Util.formatNum(num, 6);}', lng_formatter='function(num) {return L.Util.formatNum(num, 6);}').add_to(m)
+        folium.plugins.MeasureControl(position='bottomleft', primary_length_unit='meters', secondary_length_unit='kilometers', primary_area_unit='sqmeters').add_to(m)
         folium.LayerControl(collapsed=False).add_to(m)
         st_folium(m, width=1400, height=700)
 
         # ── Hazard register table ─────────────────────────────────────────────
         st.markdown("---")
-        st.subheader("📋 Hazard Register")
+        st.subheader("Hazard Register")
         cols = ['id','hazard_type','name','risk','distance_to_turbine_m','investigation_timeline','cost']
         st.dataframe(filtered[cols], use_container_width=True, height=300)
         csv = filtered.to_csv(index=False)
-        st.download_button("📥 Download CSV", csv, f"hazards_{datetime.now().strftime('%Y%m%d')}.csv", "text/csv")
+        st.download_button("Download CSV", csv, f"hazards_{datetime.now().strftime('%Y%m%d')}.csv", "text/csv")
 
         # ── Mag Targets summary table (if loaded) ────────────────────────────
         if st.session_state.mag_targets is not None and show_magt:
             st.markdown("---")
-            st.subheader("🧲 Magnetic Anomaly Summary")
+            st.subheader("Magnetic Anomaly Summary")
             df_mt = st.session_state.mag_targets
             df_show = df_mt[df_mt['nT'] >= nt_min_show].sort_values('nT', ascending=False).reset_index(drop=True)
             col_a, col_b, col_c = st.columns(3)
@@ -1799,8 +1842,8 @@ if page == "🗺️ Hazard Map":
 
 # ==============================================================================
 
-elif page == "📅 Project Timeline":
-    st.header("📅 Project Timeline & Engineering Impact Analysis")
+elif page == "Project Timeline":
+    st.header("Project Timeline & Engineering Impact Analysis")
 
     hazards_loaded = st.session_state.hazards is not None and len(st.session_state.hazards) > 0
 
@@ -1921,8 +1964,9 @@ elif page == "📅 Project Timeline":
             rc = '#CC0000' if crit_c > 0 else '#FF6600' if high_c > 0 else '#FFAA00'
 
             risk_icon = '🔴' if crit_c > 0 else '🟠' if high_c > 0 else '🟡'
+            inst_word = f"{count} instance{'s' if count > 1 else ''}"
             with st.expander(
-                f"{risk_icon} {htype}  ({count} instance{'s' if count > 1 else ''})  —  score {max_score}/10",
+                f"{risk_icon}  {htype}   |   {inst_word}   |   Max score {max_score}/10",
                 expanded=(crit_c > 0)
             ):
                 # KPI row
@@ -2032,7 +2076,7 @@ elif page == "🔬 Evidence Viewer":
                     folium.CircleMarker(
                         [lat_t, lon_t], radius=min(4 + nt_val/40, 14),
                         color=c, fill=True, fillColor=c, fillOpacity=0.7, weight=1,
-                        tooltip=f"🧲 {nt_val:.1f} nT"
+                        tooltip=f"{nt_val:.1f} nT"
                     ).add_to(mag_ev_group)
                 mag_ev_group.add_to(m)
             except:
@@ -2064,6 +2108,7 @@ elif page == "🔬 Evidence Viewer":
         folium.plugins.Fullscreen().add_to(m)
         folium.plugins.MousePosition(position='bottomright', separator=' | ', prefix='📍', lat_formatter='function(num) {return L.Util.formatNum(num, 6);}', lng_formatter='function(num) {return L.Util.formatNum(num, 6);}').add_to(m)
         folium.LayerControl(collapsed=False).add_to(m)
+        folium.plugins.MeasureControl(position='bottomleft', primary_length_unit='meters', secondary_length_unit='kilometers', primary_area_unit='sqmeters').add_to(m)
         
         # Display map with clickable markers
         map_data = st_folium(m, width=1400, height=500, key='evidence_map')
@@ -2088,7 +2133,7 @@ elif page == "🔬 Evidence Viewer":
         
         # Detailed Evidence Analysis
         st.markdown("---")
-        st.subheader("🔍 Detailed Evidence Analysis")
+        st.subheader("Detailed Evidence Analysis")
         
         # Get the hazard to display (from click or dropdown)
         haz_list = [f"{row['id']}: {row.get('name','Unknown')}" for _, row in type_hazards.iterrows()]
@@ -2117,11 +2162,11 @@ elif page == "🔬 Evidence Viewer":
             ev = generate_evidence(hrow)
             
             st.markdown("---")
-            st.subheader("⚠️ Risk Score Justification")
+            st.subheader("Risk Score Justification")
             st.markdown(ev['risk_just'])
             
             st.markdown("---")
-            st.subheader("📡 Multi-Sensor Detection Evidence")
+            st.subheader("Multi-Sensor Detection Evidence")
             
             tab0, tab1, tab2, tab3, tab4 = st.tabs(["⚖️ Risk Weighting", "SSS", "MBES", "Magnetometer", "SBP"])
 
@@ -2248,7 +2293,7 @@ elif page == "🔬 Evidence Viewer":
             )
     
     else:
-        st.info("⏳ Loading survey data automatically. If empty, navigate away and back to this page.")
+        st.info("Loading survey data automatically. If empty, navigate away and back to this page.")
 
 st.markdown("---")
 st.caption("⚡ The Grid - Powered by Multi-Sensor AI")
