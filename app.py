@@ -31,7 +31,7 @@ st.set_page_config(
     page_title="The Grid | InX Technologies",
     layout="wide",
     page_icon="⚡",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded"
 )
 
 # INX COLOR PALETTE
@@ -844,11 +844,11 @@ def create_timeline_gantt(hazards_gdf, view='before'):
     # ── Phase delay calculation ────────────────────────────────────────────────
     # Each hazard tier drives delay in specific phases
     delays = {
-        'Geotech Survey':       round(min(crit * 0.8 + high * 0.3, 4.0), 1),
-        'FEED / Engineering':   round(min(crit * 1.2 + high * 0.6 + med * 0.2, 8.0), 1),
-        'UXO / Clearance':      round(min(crit * 2.0 + high * 0.5, 10.0), 1),
-        'Consenting & Planning':round(min(crit * 1.5 + high * 0.8 + med * 0.3, 9.0), 1),
-        'Construction Prep':    round(min(high * 0.4 + med * 0.2 + low * 0.05, 3.0), 1),
+        'Geotech Survey':        round(min(crit * 0.25 + high * 0.1, 1.0), 1),
+        'FEED / Engineering':    round(min(crit * 0.5  + high * 0.25 + med * 0.1, 2.0), 1),
+        'UXO / Clearance':       round(min(crit * 0.5  + high * 0.25, 2.0), 1),
+        'Consenting & Planning': round(min(crit * 0.5  + high * 0.25 + med * 0.1, 2.0), 1),
+        'Construction Prep':     round(min(high * 0.15 + med * 0.05, 0.5), 1),
     }
 
     # ── Baseline phases (months duration) ─────────────────────────────────────
@@ -1191,58 +1191,265 @@ TEMPORAL_CHANGES = {
 
 # ==============================================================================
 # PAGE 2: PROJECT TIMELINE
-# ── Auto-load on startup ─────────────────────────────────────────────────────
-if 'auto_loaded' not in st.session_state:
-    st.session_state.auto_loaded = False
 
-if not st.session_state.auto_loaded:
-    # ── Known Google Drive file IDs ───────────────────────────────────────────────
-    DRIVE_IDS = {
-        'hazards':     '1x_aerOM_LY7bw1CJdNC35zD2KkhJo4Sh',
-        'mbes':        '1lE9X1S2Lqt3UxKgEJto5cURf1gTxOADr',
-        'turbines':    '18uYbX7OWZcqQfoBow6F_P4AmjptioeeO',
-        'sbp':         '1cZCoNX1t68X1BoiyikYKRAV0vzo_3pGO',
-        'mag_tif':     '1jyYQ9ICEFjXxFAatFQvGb-9byu3ryq5P',
-        'mag_targets': '1461Q0yswjO5qetkEfazB2JZMq5GHbSMd',
+
+def generate_evidence(haz):
+    hid = haz.get('id','')
+    sensors = haz.get('detected_by','').split(', ')
+    changes = {
+        'WRK-001': {'prev': 'Aug 2025', 'list': [
+            '**Elevation:** 2.1m → 3.8m (+1.7m increase)',
+            '**Scour:** New -0.8m depression around base',
+            '**Magnetic:** 28,500nT → 32,791nT (+4,291nT — increasing exposure)',
+            '**Status:** Wreck becoming more exposed due to seabed erosion']},
+        'WRK-002': {'prev': 'Aug 2025', 'list': [
+            '**New prominent anomaly:** 4,522nT — not detected at this amplitude in 2025',
+            '**SSS Confidence:** Strong acoustic target confirmed',
+            '**Status:** High-priority wreck candidate — investigation required']},
+        'UXO-001': {'prev': 'Aug 2025', 'list': [
+            '**Mag Increase:** 180nT → 217nT (+37nT strengthening)',
+            '**SSS Confidence:** 98% certainty on target',
+            '**Status:** Anomaly intensifying — possible further exposure of ordnance']},
+        'UXO-002': {'prev': 'Aug 2025', 'list': [
+            '**Position Change:** Migrated ~15m NE from 2025 position',
+            '**Exposure:** Previously buried, now partially exposed',
+            '**Mag:** 100nT → 141nT (becoming more prominent)',
+            '**Status:** Mobile UXO — high risk of further movement']},
+        'UXO-003': {'prev': 'Aug 2025', 'list': [
+            '**Position:** Stable within GPS uncertainty (±2m)',
+            '**Magnetic:** 48nT → 51nT (minor change within error bounds)',
+            '**Status:** Consistent low-level anomaly — monitor at construction phase']},
+        'PPL-001': {'prev': 'Aug 2025', 'list': [
+            '**Anomaly amplitude:** 75nT → 80.7nT (minor increase)',
+            '**Linear signature:** Consistent along route — ferrous pipe confirmed',
+            '**Status:** Stable pipeline anomaly — manage during cable laying']},
+        'BLD-001': {'prev': 'Aug 2025', 'list': [
+            '**Area Growth:** 210m² → 250m² (+15% expansion)',
+            '**Boulder Size:** Avg 1.8m → 2.3m (larger boulders exposed)',
+            '**Seabed Erosion:** Active scour revealing subsurface obstacles',
+            '**Status:** Dynamic field - ongoing exposure of hazards']},
+        'default': {'prev': 'Aug 2025', 'list': [
+            '**Position:** Stable within GPS uncertainty (±2m)',
+            '**Morphology:** No significant dimensional changes',
+            '**Sensors:** Consistent signatures across surveys']}
     }
+    change_data = changes.get(hid, changes['default'])
+    ev = {'sss': '', 'mbes': '', 'mag': '', 'sbp': '', 'risk_just': '', 'change': change_data}
+    htype = haz.get('hazard_type', '')
+    if 'SSS' in sensors:
+        if 'Wreck' in htype:
+            ev['sss'] = "**SSS Analysis:**\n- 45m linear target, sharp edges\n- 15m shadow (3.8m height)\n- High backscatter (steel)\n- Hull form visible\n- **Confidence: 95%**"
+        elif 'UXO' in htype:
+            ev['sss'] = "**SSS Analysis:**\n- No surface expression (buried)\n- Seabed undisturbed\n- Subsurface anomaly present\n- **Confidence: 85%**"
+        elif 'Boulder' in htype:
+            ev['sss'] = "**SSS Analysis:**\n- High backscatter clusters\n- Irregular morphology\n- 45+ targets >0.5m\n- **Confidence: 92%**"
+        elif 'Sand Wave' in htype:
+            ev['sss'] = "**SSS Analysis:**\n- Sinusoidal bedform pattern\n- Wavelength: 15-30m\n- Asymmetric profiles indicate active migration\n- **Confidence: 94%**"
+        elif 'Hard' in htype:
+            ev['sss'] = "**SSS Analysis:**\n- Very high backscatter intensity\n- Rock outcrop visible at seabed\n- **Confidence: 96%**"
+        elif 'Pipeline' in htype:
+            ev['sss'] = "**SSS Analysis:**\n- Linear target 0.9m diameter, 850m exposed\n- Acoustic shadow confirms elevation\n- **Confidence: 98%**"
+        elif 'Channel' in htype:
+            ev['sss'] = "**SSS Analysis:**\n- Linear depression visible\n- Lower backscatter in channel fill\n- **Confidence: 87%**"
+        elif 'Gas' in htype:
+            ev['sss'] = "**SSS Analysis:**\n- Pockmark expressions at seabed\n- Irregular backscatter pattern\n- **Confidence: 88%**"
+    if 'MBES' in sensors:
+        if 'Wreck' in htype:
+            ev['mbes'] = "**MBES Analysis:**\n- Elevation: 3.8m peak\n- Footprint: 45m × 12m\n- Scour moat: -0.8m\n- **Confidence: 88%**"
+        elif 'Boulder' in htype:
+            ev['mbes'] = "**MBES Analysis:**\n- 45+ elevation peaks 0.5-2.3m\n- Field: 250×180m\n- **Confidence: 90%**"
+        elif 'Gas' in htype:
+            ev['mbes'] = "**MBES Analysis:**\n- 15 pockmarks 5-20m diameter\n- Depth: 0.5-1.2m\n- **Confidence: 92%**"
+        elif 'Sand Wave' in htype:
+            ev['mbes'] = "**MBES Analysis:**\n- Amplitude: 0.8-2.5m, wavelength 20-40m\n- Active migration confirmed\n- **Confidence: 93%**"
+        elif 'Hard' in htype:
+            ev['mbes'] = "**MBES Analysis:**\n- Very high roughness (RMS >1.5m)\n- Rock surface confirmed\n- **Confidence: 95%**"
+        elif 'Pipeline' in htype:
+            ev['mbes'] = "**MBES Analysis:**\n- Elevation: 0.6m, length 850m\n- 3 free spans detected\n- **Confidence: 97%**"
+        elif 'Channel' in htype:
+            ev['mbes'] = "**MBES Analysis:**\n- Depression 4-8m deep, 80-150m wide\n- Subtle seabed expression\n- **Confidence: 89%**"
+    if 'Magnetometer' in sensors:
+        if 'Wreck' in htype:
+            ev['mag'] = "**Mag Analysis:**\n- Dipole: 32,791nT\n- Large ferrous mass confirmed\n- **Confidence: 92%**"
+        elif 'UXO' in htype:
+            ev['mag'] = "**Mag Analysis:**\n- Dipole pattern matches ordnance\n- WW2 UXO signature\n- **Confidence: 92%**"
+        elif 'Pipeline' in htype:
+            ev['mag'] = "**Mag Analysis:**\n- Linear anomaly 80.7nT\n- Ferrous material confirmed\n- **Confidence: 89%**"
+    if 'SBP' in sensors:
+        if 'Wreck' in htype:
+            ev['sbp'] = "**SBP Analysis:**\n- Hard reflector at seabed\n- No penetration — solid metallic\n- **Confidence: 85%**"
+        elif 'Gas' in htype:
+            ev['sbp'] = "**SBP Analysis:**\n- Acoustic blanking below 2m\n- Gas accumulation confirmed\n- **Confidence: 94%**"
+        elif 'Channel' in htype:
+            ev['sbp'] = "**SBP Analysis:**\n- V-shaped buried channel 4-8m deep\n- Soft sediment infill\n- **Confidence: 91%**"
+        elif 'Sand Wave' in htype:
+            ev['sbp'] = "**SBP Analysis:**\n- Mobile sand (transparent layer)\n- Active bedform migration\n- **Confidence: 88%**"
+        elif 'Hard' in htype:
+            ev['sbp'] = "**SBP Analysis:**\n- Hard reflector <0.5m depth\n- No sediment cover\n- **Confidence: 93%**"
+        elif 'Pipeline' in htype:
+            ev['sbp'] = "**SBP Analysis:**\n- Hard reflector at seabed\n- Fully exposed pipeline\n- **Confidence: 90%**"
+    score = haz.get('risk_score', 0)
+    if score >= 9.0:
+        ev['risk_just'] = f"**Risk: {score}/10 — CRITICAL**\n\n1. Multi-sensor: {len(sensors)} independent confirmations\n2. Significant cable strike risk\n3. Change detection: Dynamic / increasing exposure\n4. Immediate action required\n\n**Combined confidence: 91%**"
+    elif score >= 7.0:
+        ev['risk_just'] = f"**Risk: {score}/10 — HIGH**\n\n1. Sensor agreement: {len(sensors)} confirmations\n2. Engineering: Route modification required\n3. Timeline: Investigation/redesign delays\n\n**Mitigation required before construction**"
+    elif score >= 4.0:
+        ev['risk_just'] = f"**Risk: {score}/10 — MEDIUM**\n\n1. {len(sensors)} sensors confirm\n2. Manageable with standard mitigation\n\n**Standard burial + monitoring recommended**"
+    else:
+        ev['risk_just'] = f"**Risk: {score}/10 — LOW**\n\n1. Limited impact potential\n2. Monitoring sufficient\n\n**Document and track during construction**"
+    return ev
 
-    # ── Auto-load on first run ────────────────────────────────────────────────────
-    if not st.session_state.get('auto_loaded'):
-        _load_errors = []
 
-        # 1. Hazards GeoJSON
+# ==============================================================================
+# SIDEBAR — INX BRANDED
+# ==============================================================================
+
+FILE_IDS = {
+    'sss': ['1-fd4WYSO3jAurneJNV_QzMJVx3F5rojM','1reqiNT6_XKdFc4LzjAM634CRe3qqReZP','1MmJAYU9O6bjqst0ufZW5s_7DZQirSr5Z','10XWv6wmnIX0zHDHTtIsOoM71JtByLNVb','10YZlXZ2JDp5f7ehg4xMdFkkZCD5NVHNI','12FLV4q_9X4EzGrqIWtGShCo-BUYrmRlG','134bxFTgfLwZYWvWhIa7swmhS2UGCV7M0','15X6Ho70GmLxlDHubSDnEfEQq85s0CKol','17dJXRk_VIZuQhULjj52-BqaUAnaaeeOH','17yLRua1a3AgBYuZC4_36D7x5-kfLON7L','1A2ZYFc6Mey_pJvBtB9gGXL5zxDeJtdRM','1AiH391YcyhizRgWSldH8Oijd6PzG9a9Y','1EC4BT0SBHsYf6iYXGYXUxhmKhYNbXoeY','1Ffz5h8qjND_jS-wA3QUxtQ0DUaoNj9wC','1GDU4aonNheXJ0pK7NsWqjLyXNDzE1NwM','1IJooNeDkLj4TqCxra7iOjFYtVU182e7I','1MLaLICacB1DpyPv1jkFq8SrY1tRKl7aN','1NYTPv-3PsWs7kjeer_uf4pfGMsbwTi0E','1N_Y_bmCTUuu15IYS9j-XLJNH28OyZD9H','1RZkpzxIQgrCYnWBGm_w42stbyzVmEPva','1VlAVkEbnTbFnto57sMbfFkbzU7p67LL7','1aVvPfIXoRDC2XqmDMG92fUIZtrFpIsJq','1bHSd6XzLDYIAwnQYlDPRo8FLnH8DDJnw','1cMBJlt0A6JwfMS7fhcvR7cnJ4468gLze','1cNNmCgY6iAbHMtGm2UPeJX_NeMnb2rQn','1cvLjbwFDPjD2avHzjMuwDGKYDjjXLT5v','1dhxT_QsbygFdLV9ZYUQ6wd5_2mZSb6e5','1eaS_7K8012AneqC5LkwmuLEqqJmPO1sq','1hg9wgSkhRIzYiIhCGq1xjbFMxzSz4pSm','1iDJWZcRz_zGbOTQpYN9U1V707X5xo3yv','1jNwjUx7zdHHFKxFtAXSbYLMrmVKDdRxS','1jqZLJ5xJhxdChh9SKlbahsLviqbqPzFx','1ldV6zBMMrWfovkNbV2bSSkHyZmPUKYlI','1nzPO4LXl6PJ5TffOe6c2pHJFmZzSUDfp','1sWFLzNsAo0ZQ_nbusrNm9I7DnfFh4TIq','1t0NXhHNdHQrwuMCzfiGu1CYb1z47-XVK','1w2ZwrKigqOHqXMRnyY4GD_jNn0VTCrWE','1wkcFrGXx8dVNf5gYMkEaNeIdvIRNazJz','1wmMgdqL-B56PI4sHQ-Fr4GFxp28ptb8U','1zso2rorqe_FXDXbMfHXl3vDRodD8H7fC'],
+    'mbes':     '1lE9X1S2Lqt3UxKgEJto5cURf1gTxOADr',
+    'mag':      '1jyYQ9ICEFjXxFAatFQvGb-9byu3ryq5P',
+    'turbines': '18uYbX7OWZcqQfoBow6F_P4AmjptioeeO',
+    'sbp':      '1cZCoNX1t68X1BoiyikYKRAV0vzo_3pGO',
+    'hazards':  '1x_aerOM_LY7bw1CJdNC35zD2KkhJo4Sh',
+    'mag_targets': '1461Q0yswjO5qetkEfazB2JZMq5GHbSMd',
+}
+
+st.sidebar.header("⚙️ Data Layers")
+basemap   = st.sidebar.selectbox("Basemap", ['Esri Satellite', 'OpenStreetMap'], index=0)
+mbes_cmap = st.sidebar.selectbox("MBES Colormap", ['ocean', 'viridis', 'seismic'], index=0)
+quality   = st.sidebar.radio("Quality", ["Fast (500px)", "Good (1000px)", "High (2000px)"], index=1)
+max_px    = {"Fast (500px)": 500, "Good (1000px)": 1000, "High (2000px)": 2000}[quality]
+
+st.sidebar.markdown("---")
+st.sidebar.header("📂 Quick Load")
+
+if st.sidebar.button("Load MBES", use_container_width=True):
+    with st.spinner("Downloading MBES..."):
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.tif') as tmp:
+            try:
+                download_from_gdrive(FILE_IDS['mbes'], tmp.name)
+                img, bounds = tif_to_png_base64(tmp.name, mbes_cmap, max_px, False, False)
+                if img and bounds:
+                    st.session_state.raster_layers = [(img, bounds)]
+                    st.sidebar.success("✅ MBES loaded")
+                    st.rerun()
+                os.unlink(tmp.name)
+            except Exception as e:
+                st.sidebar.error(f"Error: {e}")
+
+if st.sidebar.button("Load Hazards", use_container_width=True):
+    with st.spinner("Downloading hazards..."):
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.json') as tmp:
+            try:
+                download_from_gdrive(FILE_IDS['hazards'], tmp.name)
+                gdf = gpd.read_file(tmp.name)
+                st.session_state.hazards = patch_hazard_coordinates(gdf)
+                st.sidebar.success(f"✅ {len(st.session_state.hazards)} hazards loaded")
+                os.unlink(tmp.name)
+                st.rerun()
+            except Exception as e:
+                st.sidebar.error(f"Error: {e}")
+
+if st.sidebar.button("Load SSS Tiles", use_container_width=True):
+    prog = st.sidebar.progress(0)
+    count = 0
+    st.session_state.raster_layers = []
+    for i, fid in enumerate(FILE_IDS['sss']):
         try:
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.json') as _tmp:
-                download_from_gdrive(DRIVE_IDS['hazards'], _tmp.name)
-                _gdf = gpd.read_file(_tmp.name)
-                st.session_state.hazards = patch_hazard_coordinates(_gdf)
-                os.unlink(_tmp.name)
-        except Exception as _e:
-            _load_errors.append(f'Hazards: {_e}')
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.tif') as tmp:
+                download_from_gdrive(fid, tmp.name)
+                img, bounds = tif_to_png_base64(tmp.name, 'gray', max_px, True, False)
+                if img and bounds:
+                    st.session_state.raster_layers.append((img, bounds))
+                    count += 1
+                os.unlink(tmp.name)
+        except:
+            pass
+        prog.progress((i+1)/len(FILE_IDS['sss']))
+    prog.empty()
+    st.sidebar.success(f"✅ {count} SSS tiles loaded")
+    st.rerun()
 
-        # 2. MBES raster
-        try:
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.tif') as _tmp:
-                download_from_gdrive(DRIVE_IDS['mbes'], _tmp.name)
-                _img, _bnd = tif_to_png_base64(_tmp.name)
-                if _img and _bnd:
-                    st.session_state.raster_layers = [(_img, _bnd)]
-                os.unlink(_tmp.name)
-        except Exception as _e:
-            _load_errors.append(f'MBES: {_e}')
+if st.sidebar.button("Load Mag TIF", use_container_width=True):
+    with st.spinner("Downloading Mag TIF..."):
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.tif') as tmp:
+            try:
+                download_from_gdrive(FILE_IDS['mag'], tmp.name)
+                img, bounds = tif_to_png_base64(tmp.name, 'seismic', max_px, False, True)
+                if img and bounds:
+                    st.session_state.mag_tif_layer = (img, bounds)
+                    st.sidebar.success("✅ Mag TIF loaded")
+                    st.rerun()
+                os.unlink(tmp.name)
+            except Exception as e:
+                st.sidebar.error(f"Error: {e}")
 
-        # 3. Turbines GeoJSON
-        try:
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.json') as _tmp:
-                download_from_gdrive(DRIVE_IDS['turbines'], _tmp.name)
-                st.session_state.turbines = gpd.read_file(_tmp.name)
-                os.unlink(_tmp.name)
-        except Exception as _e:
-            _load_errors.append(f'Turbines: {_e}')
+if st.sidebar.button("Load Turbines", use_container_width=True):
+    with st.spinner("Downloading turbines..."):
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.json') as tmp:
+            try:
+                download_from_gdrive(FILE_IDS['turbines'], tmp.name)
+                st.session_state.turbines = gpd.read_file(tmp.name)
+                st.sidebar.success(f"✅ {len(st.session_state.turbines)} turbines loaded")
+                os.unlink(tmp.name)
+                st.rerun()
+            except Exception as e:
+                st.sidebar.error(f"Error: {e}")
 
-        st.session_state.auto_loaded = True
-        if _load_errors:
-            st.session_state.auto_load_errors = _load_errors
+if st.sidebar.button("Load Mag Targets CSV", use_container_width=True):
+    with st.spinner("Downloading mag targets..."):
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.csv') as tmp:
+            try:
+                download_from_gdrive(FILE_IDS['mag_targets'], tmp.name)
+                df = pd.read_csv(tmp.name)
+                df.columns = [c.strip() for c in df.columns]
+                df = df.loc[:, ~df.columns.duplicated(keep='first')]
+                for col in ['Latitude','Longitude','nT']:
+                    if col in df.columns:
+                        df[col] = pd.to_numeric(df[col], errors='coerce')
+                df = df.dropna(subset=['Latitude','Longitude','nT'])
+                st.session_state.mag_targets = df
+                st.sidebar.success(f"✅ {len(df)} mag targets loaded")
+                os.unlink(tmp.name)
+                st.rerun()
+            except Exception as e:
+                st.sidebar.error(f"Error: {e}")
+
+if st.sidebar.button("Load SBP", use_container_width=True):
+    with st.spinner("Downloading SBP..."):
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.json') as tmp:
+            try:
+                download_from_gdrive(FILE_IDS['sbp'], tmp.name)
+                st.session_state.sbp_lines = gpd.read_file(tmp.name)
+                st.sidebar.success(f"✅ {len(st.session_state.sbp_lines)} SBP lines loaded")
+                os.unlink(tmp.name)
+                st.rerun()
+            except Exception as e:
+                st.sidebar.error(f"Error: {e}")
+
+if st.sidebar.button("🗑️ Clear All", use_container_width=True):
+    st.session_state.raster_layers = []
+    st.session_state.hazards       = None
+    st.session_state.turbines      = None
+    st.session_state.sbp_lines     = None
+    st.session_state.mag_tif_layer = None
+    st.session_state.mag_targets   = None
+    st.rerun()
+
+if st.session_state.hazards is not None:
+    hazs = st.session_state.hazards
+    crit_n = len(hazs[hazs['risk']=='Critical'])
+    high_n = len(hazs[hazs['risk']=='High'])
+    st.sidebar.markdown("---")
+    st.sidebar.header("📊 Project Impact")
+    st.sidebar.metric("Critical Hazards", crit_n, delta="Immediate action" if crit_n else None)
+    st.sidebar.metric("High Risk",        high_n, delta="Engineering uplift" if high_n else None)
+    st.sidebar.metric("Total Hazards",    len(hazs))
+
+st.sidebar.markdown("---")
+st.sidebar.success("✅ System Operational")
+st.sidebar.caption(f"📡 {datetime.now().strftime('%d %b %Y  %H:%M')}")
+
 
 # ==============================================================================
 
@@ -1319,7 +1526,6 @@ if page == "🗺️ Hazard Map":
         else:
             center_lat, center_lon = 53.81, 0.13
 
-        basemap = 'Esri Satellite'  # default; was formerly a sidebar widget
         if basemap == 'Esri Satellite':
             m = folium.Map([center_lat, center_lon], zoom_start=13, tiles=None)
             folium.TileLayer(
@@ -1714,10 +1920,9 @@ elif page == "📅 Project Timeline":
             # Risk colour
             rc = '#CC0000' if crit_c > 0 else '#FF6600' if high_c > 0 else '#FFAA00'
 
+            risk_icon = '🔴' if crit_c > 0 else '🟠' if high_c > 0 else '🟡'
             with st.expander(
-                f"{'🔴' if crit_c > 0 else '🟠' if high_c > 0 else '🟡'} "
-                f"{htype} — {count} instance{'s' if count > 1 else ''} | "
-                f"Max score {max_score}/10 | {profile['cost_range']} | {profile['schedule_exposure']} schedule exposure",
+                f"{risk_icon} {htype}  ({count} instance{'s' if count > 1 else ''})  —  score {max_score}/10",
                 expanded=(crit_c > 0)
             ):
                 # KPI row
