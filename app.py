@@ -1319,6 +1319,7 @@ if page == "🗺️ Hazard Map":
         else:
             center_lat, center_lon = 53.81, 0.13
 
+        basemap = 'Esri Satellite'  # default; was formerly a sidebar widget
         if basemap == 'Esri Satellite':
             m = folium.Map([center_lat, center_lon], zoom_start=13, tiles=None)
             folium.TileLayer(
