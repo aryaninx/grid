@@ -809,459 +809,388 @@ def risk_weight_breakdown_html(haz_row):
 
 
 
-def create_timeline_gantt(hazards_gdf, scenario='original'):
-    """Create Gantt chart with InX branding"""
-    start_date = datetime(2024, 1, 1)
-    
-    if scenario == 'original':
-        phases = [
-            dict(Task="Geophysical Survey", Start=0, Duration=3, Resource="Survey"),
-            dict(Task="Data Processing", Start=3, Duration=2, Resource="Analysis"),
-            dict(Task="Geotechnical Survey", Start=5, Duration=4, Resource="Survey"),
-            dict(Task="Engineering Design", Start=9, Duration=6, Resource="Engineering"),
-            dict(Task="Consenting & Planning", Start=15, Duration=12, Resource="Planning"),
-            dict(Task="Construction", Start=27, Duration=24, Resource="Construction")
-        ]
-        total_months = 51
-        financial_markers = []
-    else:
-        if hazards_gdf is None or len(hazards_gdf) == 0:
-            return create_timeline_gantt(None, 'original')
-        
-        critical = len(hazards_gdf[hazards_gdf['risk'] == 'Critical'])
-        high = len(hazards_gdf[hazards_gdf['risk'] == 'High'])
-        medium = len(hazards_gdf[hazards_gdf['risk'] == 'Medium'])
-        
-        phases = []
-        curr = 0
-        
-        phases.append(dict(Task="Geophysical Survey", Start=curr, Duration=3, Resource="Survey"))
-        curr += 3
-        phases.append(dict(Task="Data Processing", Start=curr, Duration=2, Resource="Analysis"))
-        curr += 2
-        
-        if critical > 0 or high > 0:
-            # Targeted resurvey for critical/high hazards
-            phases.append(dict(Task="⚠️ Targeted Resurvey", Start=curr, Duration=3, Resource="Resurvey"))
-            curr += 3
-            phases.append(dict(Task="Mitigation Planning", Start=curr, Duration=2, Resource="Analysis"))
-            curr += 2
-        
-        # Geotechnical survey - slight delay if critical hazards require route changes
-        geotech_delay = min(critical * 0.5, 2)  # Cap at 2 months max
-        phases.append(dict(Task="Geotechnical Survey", Start=curr, Duration=4+geotech_delay, Resource="Survey"))
-        curr += 4 + geotech_delay
-        
-        # Engineering design - extended if major route changes needed
-        design_ext = min(critical * 0.5 + high * 0.25, 3)  # Cap at 3 months max
-        phases.append(dict(Task="Engineering Design", Start=curr, Duration=6+design_ext, Resource="Engineering"))
-        curr += 6 + design_ext
-        
-        # Consenting - delays for UXO clearance approvals and route variations
-        consent_delay = min(critical * 1.0 + high * 0.5, 6)  # Cap at 6 months max
-        phases.append(dict(Task="Consenting & Planning", Start=curr, Duration=12+consent_delay, Resource="Planning"))
-        curr += 12 + consent_delay
-        
-        # Construction - no delay (hazards handled in design phase)
-        phases.append(dict(Task="Construction", Start=curr, Duration=24, Resource="Construction"))
-        curr += 24
-        
-        total_months = curr
-        
-        def parse_cost(s):
-            try:
-                parts = s.replace('£','').replace(',','').split('-')
-                return (float(parts[0]) + float(parts[1] if len(parts)>1 else parts[0]))/2
-            except:
-                return 0
-        
-        cost_crit = hazards_gdf[hazards_gdf['risk']=='Critical']['cost'].apply(parse_cost).sum()
-        cost_high = hazards_gdf[hazards_gdf['risk']=='High']['cost'].apply(parse_cost).sum()
-        cost_med = hazards_gdf[hazards_gdf['risk']=='Medium']['cost'].apply(parse_cost).sum()
-        
-        financial_markers = []
-        if critical > 0:
-            financial_markers.append({'month': 7, 'cost': cost_crit, 'label': f'Critical: £{cost_crit/1000:.0f}K', 'color': '#D1FE49'})
-        if high > 0:
-            financial_markers.append({'month': 12, 'cost': cost_high, 'label': f'High: £{cost_high/1000:.0f}K', 'color': '#0013C3'})
-        if medium > 0:
-            financial_markers.append({'month': 18, 'cost': cost_med, 'label': f'Medium: £{cost_med/1000:.0f}K', 'color': '#8F998D'})
-    
-    for p in phases:
-        p['Start'] = start_date + timedelta(days=p['Start']*30)
-        p['Finish'] = p['Start'] + timedelta(days=p['Duration']*30)
-    
-    # InX color scheme for phases
-    colors = {
-        'Survey': '#0013C3',      # Precision blue
-        'Analysis': '#12241E',    # Musk green
-        'Resurvey': '#D1FE49',    # Neon current
-        'Engineering': '#8288A3', # Rocky blue
-        'Planning': '#8F998D',    # Sage green
-        'Construction': '#0013C3' # Precision blue
+def create_timeline_gantt(hazards_gdf, view='before'):
+    """
+    Single Gantt chart with two views:
+      'before' = baseline pre-survey schedule (no hazard impact)
+      'after'  = hazard-adjusted schedule with per-phase delay attribution
+    Returns (fig, total_months, phase_delays_dict)
+    """
+    import plotly.graph_objects as go
+    from datetime import datetime, timedelta
+
+    start_date = datetime(2025, 6, 1)
+
+    INX_COLORS = {
+        'Survey':       '#0013C3',
+        'Analysis':     '#8288A3',
+        'Engineering':  '#12241E',
+        'Planning':     '#8F998D',
+        'Construction': '#D1FE49',
+        'Contingency':  '#FF4500',
     }
-    
-    fig = ff.create_gantt(phases, colors=colors, index_col='Resource', show_colorbar=True, group_tasks=True,
-                         title=f"Timeline - {scenario.replace('_',' ').title()}")
-    
-    if scenario == 'with_hazards' and financial_markers:
-        for m in financial_markers:
-            m_date = start_date + timedelta(days=m['month']*30)
-            fig.add_trace(go.Scatter(x=[m_date,m_date], y=[0,len(phases)], mode='lines+text',
-                                    line=dict(color=m['color'], width=3, dash='dash'),
-                                    text=[m['label'],''], textposition='top center', showlegend=False))
-    
-    # White theme for Gantt with better layout
-    fig.update_layout(
-        height=550,
-        plot_bgcolor='#FFFFFF',
-        paper_bgcolor='#FFFFFF',
-        font=dict(color='#000000', family='Space Grotesk', size=11),
-        xaxis=dict(
-            gridcolor='#E0E0E0', 
-            gridwidth=0.5, 
-            showgrid=True,
-            title="Timeline (Years)"
-        ),
-        yaxis=dict(
-            gridcolor='#E0E0E0', 
-            gridwidth=0.5, 
-            showgrid=True,
-            automargin=True
-        ),
-        title=dict(font=dict(color='#000000', size=14)),
-        margin=dict(l=250, r=50, t=60, b=120),  # More space for labels and legend
-        showlegend=True,
-        legend=dict(
-            orientation="h",
-            yanchor="top",
-            y=-0.2,  # Below the chart
-            xanchor="center",
-            x=0.5,
-            font=dict(size=10)
-        ),
-        bargap=0.15
+
+    # ── Hazard counts ──────────────────────────────────────────────────────────
+    if hazards_gdf is not None and len(hazards_gdf) > 0:
+        crit = int(len(hazards_gdf[hazards_gdf['risk'] == 'Critical']))
+        high = int(len(hazards_gdf[hazards_gdf['risk'] == 'High']))
+        med  = int(len(hazards_gdf[hazards_gdf['risk'] == 'Medium']))
+        low  = int(len(hazards_gdf[hazards_gdf['risk'] == 'Low']))
+    else:
+        crit = high = med = low = 0
+
+    # ── Phase delay calculation ────────────────────────────────────────────────
+    # Each hazard tier drives delay in specific phases
+    delays = {
+        'Geotech Survey':       round(min(crit * 0.8 + high * 0.3, 4.0), 1),
+        'FEED / Engineering':   round(min(crit * 1.2 + high * 0.6 + med * 0.2, 8.0), 1),
+        'UXO / Clearance':      round(min(crit * 2.0 + high * 0.5, 10.0), 1),
+        'Consenting & Planning':round(min(crit * 1.5 + high * 0.8 + med * 0.3, 9.0), 1),
+        'Construction Prep':    round(min(high * 0.4 + med * 0.2 + low * 0.05, 3.0), 1),
+    }
+
+    # ── Baseline phases (months duration) ─────────────────────────────────────
+    base_phases = [
+        ('Geophysical Survey',   3,  'Survey'),
+        ('Data Processing',      2,  'Analysis'),
+        ('Geotech Survey',       3,  'Survey'),
+        ('FEED / Engineering',   5,  'Engineering'),
+        ('UXO / Clearance',      0,  'Contingency'),   # 0 in baseline
+        ('Consenting & Planning',12, 'Planning'),
+        ('Construction Prep',    3,  'Engineering'),
+        ('Construction',         18, 'Construction'),
+        ('Commissioning',        3,  'Survey'),
+    ]
+
+    phases = []
+    curr = 0
+    for name, base_dur, resource in base_phases:
+        if view == 'before':
+            dur = base_dur
+            ext = 0.0
+        else:
+            ext = delays.get(name, 0.0)
+            dur = base_dur + ext
+        if dur == 0:
+            continue
+        phases.append({
+            'task': name, 'start': curr, 'dur': dur,
+            'base': base_dur, 'ext': ext, 'resource': resource
+        })
+        curr += dur
+
+    total_months = curr
+
+    # ── Build Gantt bars ───────────────────────────────────────────────────────
+    fig = go.Figure()
+    bar_height = 0.6
+
+    for i, p in enumerate(phases):
+        sd = start_date + timedelta(days=p['start'] * 30.4)
+        ed = sd + timedelta(days=p['base'] * 30.4)
+        col = INX_COLORS.get(p['resource'], '#aaa')
+
+        # Base duration bar
+        hover = (f"<b>{p['task']}</b><br>"
+                 f"Base duration: {p['base']} months<br>"
+                 f"Start: month {p['start']:.1f}<br>"
+                 f"Resource: {p['resource']}")
+        if view == 'after' and p['ext'] > 0:
+            hover += f"<br><b>+{p['ext']:.1f} month hazard delay</b>"
+
+        fig.add_trace(go.Bar(
+            name=p['task'],
+            x=[p['base']],
+            y=[p['task']],
+            base=[p['start']],
+            orientation='h',
+            marker=dict(color=col, opacity=0.92, line=dict(color='white', width=1)),
+            hovertemplate=hover + '<extra></extra>',
+            showlegend=False,
+            width=bar_height,
+        ))
+
+        # Extension bar (hazard delay) shown in orange
+        if view == 'after' and p['ext'] > 0:
+            ext_hover = (f"<b>⚠️ Hazard Delay: {p['task']}</b><br>"
+                         f"+{p['ext']:.1f} months from {crit}C/{high}H/{med}M/{low}L hazards")
+            fig.add_trace(go.Bar(
+                name=f"{p['task']} delay",
+                x=[p['ext']],
+                y=[p['task']],
+                base=[p['start'] + p['base']],
+                orientation='h',
+                marker=dict(color='#FF4500', opacity=0.75,
+                            pattern=dict(shape='/', size=6, fgcolor='rgba(255,69,0,0.4)')),
+                hovertemplate=ext_hover + '<extra></extra>',
+                showlegend=False,
+                width=bar_height,
+            ))
+
+    # ── Month axis → calendar labels ──────────────────────────────────────────
+    tick_months = list(range(0, int(total_months) + 3, 3))
+    tick_labels = []
+    for m in tick_months:
+        d = start_date + timedelta(days=m * 30.4)
+        tick_labels.append(d.strftime("%b '%y"))
+
+    # ── Vertical "now" line ────────────────────────────────────────────────────
+    now_month = 9  # ~March 2026 relative to Jun 2025 start
+
+    # ── Layout ────────────────────────────────────────────────────────────────
+    title_text = (
+        f"Baseline Schedule — {total_months:.0f} months"
+        if view == 'before'
+        else f"Hazard-Adjusted Schedule — {total_months:.0f} months "
+             f"(+{total_months - sum(p['base'] for p in phases):.1f} mo delay)"
     )
-    
-    # Ensure x-axis is visible
-    fig.update_xaxes(fixedrange=False, showticklabels=True)
-    
-    return fig, total_months, financial_markers if scenario=='with_hazards' else []
 
-def generate_evidence(haz):
-    """Generate evidence - same as before"""
-    hid = haz.get('id','')
-    sensors = haz.get('detected_by','').split(', ')
-    
-    changes = {
-        'WRK-001': {'prev': 'Mar 2023', 'list': [
-            '**Elevation:** 2.1m → 3.8m (+1.7m increase)',
-            '**Scour:** New -0.8m depression around base',
-            '**Magnetic:** 28,500nT → 32,791nT (+4,291nT — increasing exposure)',
-            '**Status:** Wreck becoming more exposed due to seabed erosion'
-        ]},
-        'WRK-002': {'prev': 'Mar 2023', 'list': [
-            '**New prominent anomaly:** 4,522nT — not detected at this amplitude in 2023',
-            '**SSS Confidence:** Strong acoustic target confirmed',
-            '**Status:** High-priority wreck candidate — investigation required'
-        ]},
-        'UXO-001': {'prev': 'Mar 2023', 'list': [
-            '**Mag Increase:** 180nT → 217nT (+37nT strengthening)',
-            '**SSS Confidence:** 98% certainty on target',
-            '**Status:** Anomaly intensifying — possible further exposure of ordnance'
-        ]},
-        'UXO-002': {'prev': 'Mar 2023', 'list': [
-            '**Position Change:** Migrated ~15m NE from 2023 position',
-            '**Exposure:** Previously buried, now partially exposed',
-            '**Mag:** 100nT → 141nT (becoming more prominent)',
-            '**Status:** Mobile UXO — high risk of further movement'
-        ]},
-        'UXO-003': {'prev': 'Mar 2023', 'list': [
-            '**Position:** Stable within GPS uncertainty (±2m)',
-            '**Magnetic:** 48nT → 51nT (minor change within error bounds)',
-            '**Status:** Consistent low-level anomaly — monitor at construction phase'
-        ]},
-        'PPL-001': {'prev': 'Mar 2023', 'list': [
-            '**Anomaly amplitude:** 75nT → 80.7nT (minor increase)',
-            '**Linear signature:** Consistent along route — ferrous pipe confirmed',
-            '**Status:** Stable pipeline anomaly — manage during cable laying'
-        ]},
-        'BLD-001': {'prev': 'Mar 2023', 'list': [
-            '**Area Growth:** 210m² → 250m² (+15% expansion)',
-            '**Boulder Size:** Avg 1.8m → 2.3m (larger boulders exposed)',
-            '**Seabed Erosion:** Active scour revealing subsurface obstacles',
-            '**Status:** Dynamic field - ongoing exposure of hazards'
-        ]},
-        'default': {'prev': 'Mar 2023', 'list': [
-            '**Position:** Stable within GPS uncertainty (±2m)',
-            '**Morphology:** No significant dimensional changes',
-            '**Sensors:** Consistent signatures across surveys'
-        ]}
-    }
-    
-    change_data = changes.get(hid, changes['default'])
-    ev = {'sss': '', 'mbes': '', 'mag': '', 'sbp': '', 'risk_just': '', 'change': change_data}
-    
-    htype = haz.get('hazard_type', '')
-    
-    if 'SSS' in sensors:
-        if 'Wreck' in htype:
-            ev['sss'] = "**SSS Analysis:**\n- 45m linear target, sharp edges\n- 15m shadow (3.8m height)\n- High backscatter (steel)\n- Hull form visible\n- **Confidence: 95%**"
-        elif 'UXO' in htype:
-            ev['sss'] = "**SSS Analysis:**\n- No surface expression (buried)\n- Seabed undisturbed\n- Subsurface anomaly present\n- Recent burial indicated\n- **Confidence: 85%**"
-        elif 'Boulder' in htype:
-            ev['sss'] = "**SSS Analysis:**\n- High backscatter clusters\n- Irregular morphology\n- Shadow confirms elevation\n- 45+ targets >0.5m\n- **Confidence: 92%**"
-        elif 'Sand Wave' in htype:
-            ev['sss'] = "**SSS Analysis:**\n- Sinusoidal bedform pattern\n- Wavelength: 15-30m\n- Asymmetric profiles indicate active migration\n- Ripple trains on lee slopes\n- **Confidence: 94%**"
-        elif 'Hard Ground' in htype or 'Hard' in htype:
-            ev['sss'] = "**SSS Analysis:**\n- Very high backscatter intensity\n- Rough texture across area\n- Outcrop visible at seabed\n- No sediment veneer\n- **Confidence: 96%**"
-        elif 'Pipeline' in htype:
-            ev['sss'] = "**SSS Analysis:**\n- Linear target 0.9m diameter\n- 850m exposed length detected\n- Consistent geometry\n- Acoustic shadow confirms elevation\n- **Confidence: 98%**"
-        elif 'Channel' in htype:
-            ev['sss'] = "**SSS Analysis:**\n- Linear depression visible in imagery\n- Lower backscatter in channel fill\n- Width: 80-150m at seabed\n- Subtle surface expression\n- **Confidence: 87%**"
-    
-    if 'MBES' in sensors:
-        if 'Wreck' in htype:
-            ev['mbes'] = "**MBES Analysis:**\n- Elevation: 3.8m peak\n- Footprint: 45m × 12m\n- Scour moat: -0.8m\n- Roughness elevated\n- **Confidence: 88%**"
-        elif 'Boulder' in htype:
-            ev['mbes'] = "**MBES Analysis:**\n- 45+ elevation peaks\n- Height: 0.5-2.3m range\n- Field: 250×180m\n- RMS roughness: 0.8m\n- **Confidence: 90%**"
-        elif 'Gas' in htype:
-            ev['mbes'] = "**MBES Analysis:**\n- 15 pockmarks detected\n- Diameter: 5-20m\n- Depth: 0.5-1.2m\n- Clustered pattern\n- **Confidence: 92%**"
-        elif 'Sand Wave' in htype:
-            ev['mbes'] = "**MBES Analysis:**\n- Amplitude: 0.8-2.5m\n- Wavelength: 20-40m\n- Asymmetric crests indicate migration\n- Extends 800m × 600m\n- **Confidence: 93%**"
-        elif 'Hard Ground' in htype or 'Hard' in htype:
-            ev['mbes'] = "**MBES Analysis:**\n- Very high roughness (RMS >1.5m)\n- Irregular surface topography\n- No sediment drape visible\n- Backscatter intensity very high\n- **Confidence: 95%**"
-        elif 'Pipeline' in htype:
-            ev['mbes'] = "**MBES Analysis:**\n- Elevation: 0.6m above seabed\n- Linear feature 850m length\n- Diameter: 0.9m consistent\n- Free spans detected: 3 locations\n- **Confidence: 97%**"
-        elif 'Channel' in htype:
-            ev['mbes'] = "**MBES Analysis:**\n- V-shaped depression: 4-8m deep\n- Width: 80-150m\n- Length: >1km (extends beyond survey)\n- Subtle expression at seabed\n- **Confidence: 89%**"
-    
-    if 'Magnetometer' in sensors:
-        # Use hardcoded real nT from the patched column (only set for Wreck/UXO/Pipeline pins)
-        actual_nt = None
-        try:
-            v = haz.get('mag_nt', None)
-            if v is not None and str(v) not in ('', 'None', 'nan'):
-                actual_nt = float(v)
-        except:
-            pass
+    fig.update_layout(
+        title=dict(text=title_text, font=dict(size=15, color='#2E2E2E'), x=0),
+        barmode='overlay',
+        xaxis=dict(
+            title='Project Month',
+            tickvals=tick_months,
+            ticktext=tick_labels,
+            gridcolor='#ececec',
+            zeroline=False,
+            range=[-0.5, total_months + 1],
+        ),
+        yaxis=dict(autorange='reversed', tickfont=dict(size=11)),
+        height=420,
+        margin=dict(l=10, r=20, t=50, b=40),
+        paper_bgcolor='white',
+        plot_bgcolor='#fafafa',
+        font=dict(family='Arial', size=11, color='#2E2E2E'),
+        shapes=[dict(
+            type='line', x0=now_month, x1=now_month, y0=-0.5,
+            y1=len(phases) - 0.5,
+            line=dict(color='#0013C3', width=2, dash='dot')
+        )],
+        annotations=[dict(
+            x=now_month, y=-0.5, text='▲ Now', showarrow=False,
+            font=dict(color='#0013C3', size=10), yanchor='top'
+        )],
+    )
 
-        if 'Wreck' in htype:
-            nt_display = f"{actual_nt:,.1f} nT" if actual_nt else "245 nT"
-            ev['mag'] = f"**Mag Analysis:**\n- Dipole amplitude: **{nt_display}**\n- Large ferrous mass confirmed\n- Anomaly co-located with SSS/MBES target\n- Steel hull signature\n- **Confidence: 92%**"
-        elif 'UXO' in htype:
-            nt_display = f"{actual_nt:,.1f} nT" if actual_nt else "187 nT"
-            ev['mag'] = f"**Mag Analysis:**\n- Dipole amplitude: **{nt_display}**\n- Compact ordnance signature\n- WWII pattern — consistent with bomb/mine\n- Target depth ~1–2m below seabed\n- **Confidence: 92%**"
-        elif 'Pipeline' in htype:
-            nt_display = f"{actual_nt:,.1f} nT" if actual_nt else "15–25 nT"
-            ev['mag'] = f"**Mag Analysis:**\n- Anomaly amplitude: **{nt_display}**\n- Linear ferrous signature along route\n- Consistent with steel pipeline\n- Confirms metallic structure\n- **Confidence: 89%**"
-    
-    if 'SBP' in sensors:
-        if 'Wreck' in htype:
-            ev['sbp'] = "**SBP Analysis:**\n- Hard reflector at seabed\n- No acoustic penetration\n- Solid metallic structure\n- Confirms upstanding obstacle\n- **Confidence: 85%**"
-        elif 'Gas' in htype:
-            ev['sbp'] = "**SBP Analysis:**\n- Acoustic blanking below 2m\n- Bright spots present\n- Gas accumulation confirmed\n- 2-8m depth zone affected\n- **Confidence: 94%**"
-        elif 'Channel' in htype:
-            ev['sbp'] = "**SBP Analysis:**\n- V-shaped buried channel\n- Depth below seabed: 4-8m\n- Infill: soft sediment (low velocity)\n- Base reflector visible\n- **Confidence: 91%**"
-        elif 'Sand Wave' in htype:
-            ev['sbp'] = "**SBP Analysis:**\n- Mobile sand detected (transparent)\n- No hard reflectors\n- Sediment thickness varies 1-3m\n- Active bedform migration indicated\n- **Confidence: 88%**"
-        elif 'Hard Ground' in htype or 'Hard' in htype:
-            ev['sbp'] = "**SBP Analysis:**\n- Hard reflector at <0.5m depth\n- No acoustic penetration\n- Rock surface confirmed\n- No sediment cover\n- **Confidence: 93%**"
-        elif 'Pipeline' in htype:
-            ev['sbp'] = "**SBP Analysis:**\n- Hard reflector at seabed\n- Linear target matches SSS/MBES\n- No burial detected\n- Fully exposed pipeline\n- **Confidence: 90%**"
-    
-    score = haz.get('risk_score', 0)
-    if score >= 9.0:
-        ev['risk_just'] = f"**Risk: {score}/10 - CRITICAL**\n\n1. Multi-sensor: {len(sensors)} independent confirmations\n2. Size/magnitude: Significant cable strike risk\n3. Location: {haz.get('distance_to_turbine_m')}m from infrastructure\n4. Change detection: Dynamic seabed/increasing exposure\n5. Mitigation: Immediate action required\n\n**Combined confidence: 91%**"
-    elif score >= 7.0:
-        ev['risk_just'] = f"**Risk: {score}/10 - HIGH**\n\n1. Sensor agreement: {len(sensors)} confirmations\n2. Proximity: {haz.get('distance_to_turbine_m')}m to turbine\n3. Engineering: Route modification required\n4. Timeline: Investigation/redesign delays\n\n**Mitigation required before construction**"
-    elif score >= 4.0:
-        ev['risk_just'] = f"**Risk: {score}/10 - MEDIUM**\n\n1. Detection: {len(sensors)} sensors confirm\n2. Impact: Manageable with standard mitigation\n3. Timeline: Can be scheduled during normal phases\n\n**Standard burial + monitoring recommended**"
-    else:
-        ev['risk_just'] = f"**Risk: {score}/10 - LOW**\n\n1. Minor hazard: Limited impact potential\n2. Mitigation: Monitoring sufficient\n3. No urgent action required\n\n**Document and track during construction**"
-    
-    return ev
+    return fig, total_months, delays
 
 
-# ==============================================================================
-# SIDEBAR - INX BRANDED
-# ==============================================================================
-
-st.sidebar.header("Display Settings")
-basemap = st.sidebar.selectbox("Basemap", ['OpenStreetMap', 'Esri Satellite'], index=1)
-mbes_cmap = st.sidebar.selectbox("MBES Colormap", ['ocean', 'viridis', 'seismic'], index=0)
-quality = st.sidebar.radio("Quality", ["Fast (500px)", "Good (1000px)", "High (2000px)"], index=1)
-max_px = {"Fast (500px)": 500, "Good (1000px)": 1000, "High (2000px)": 2000}[quality]
-
-FILE_IDS = {
-    'sss': ['1-fd4WYSO3jAurneJNV_QzMJVx3F5rojM','1reqiNT6_XKdFc4LzjAM634CRe3qqReZP','1MmJAYU9O6bjqst0ufZW5s_7DZQirSr5Z','10XWv6wmnIX0zHDHTtIsOoM71JtByLNVb','10YZlXZ2JDp5f7ehg4xMdFkkZCD5NVHNI','12FLV4q_9X4EzGrqIWtGShCo-BUYrmRlG','134bxFTgfLwZYWvWhIa7swmhS2UGCV7M0','15X6Ho70GmLxlDHubSDnEfEQq85s0CKol','17dJXRk_VIZuQhULjj52-BqaUAnaaeeOH','17yLRua1a3AgBYuZC4_36D7x5-kfLON7L','1A2ZYFc6Mey_pJvBtB9gGXL5zxDeJtdRM','1AiH391YcyhizRgWSldH8Oijd6PzG9a9Y','1EC4BT0SBHsYf6iYXGYXUxhmKhYNbXoeY','1Ffz5h8qjND_jS-wA3QUxtQ0DUaoNj9wC','1GDU4aonNheXJ0pK7NsWqjLyXNDzE1NwM','1IJooNeDkLj4TqCxra7iOjFYtVU182e7I','1MLaLICacB1DpyPv1jkFq8SrY1tRKl7aN','1NYTPv-3PsWs7kjeer_uf4pfGMsbwTi0E','1N_Y_bmCTUuu15IYS9j-XLJNH28OyZD9H','1RZkpzxIQgrCYnWBGm_w42stbyzVmEPva','1VlAVkEbnTbFnto57sMbfFkbzU7p67LL7','1aVvPfIXoRDC2XqmDMG92fUIZtrFpIsJq','1bHSd6XzLDYIAwnQYlDPRo8FLnH8DDJnw','1cMBJlt0A6JwfMS7fhcvR7cnJ4468gLze','1cNNmCgY6iAbHMtGm2UPeJX_NeMnb2rQn','1cvLjbwFDPjD2avHzjMuwDGKYDjjXLT5v','1dhxT_QsbygFdLV9ZYUQ6wd5_2mZSb6e5','1eaS_7K8012AneqC5LkwmuLEqqJmPO1sq','1hg9wgSkhRIzYiIhCGq1xjbFMxzSz4pSm','1iDJWZcRz_zGbOTQpYN9U1V707X5xo3yv','1jNwjUx7zdHHFKxFtAXSbYLMrmVKDdRxS','1jqZLJ5xJhxdChh9SKlbahsLviqbqPzFx','1ldV6zBMMrWfovkNbV2bSSkHyZmPUKYlI','1nzPO4LXl6PJ5TffOe6c2pHJFmZzSUDfp','1sWFLzNsAo0ZQ_nbusrNm9I7DnfFh4TIq','1t0NXhHNdHQrwuMCzfiGu1CYb1z47-XVK','1w2ZwrKigqOHqXMRnyY4GD_jNn0VTCrWE','1wkcFrGXx8dVNf5gYMkEaNeIdvIRNazJz','1wmMgdqL-B56PI4sHQ-Fr4GFxp28ptb8U','1zso2rorqe_FXDXbMfHXl3vDRodD8H7fC'],
-    'mbes': '1lE9X1S2Lqt3UxKgEJto5cURf1gTxOADr',
-    'mag': '1jyYQ9ICEFjXxFAatFQvGb-9byu3ryq5P',
-    'turbines': '18uYbX7OWZcqQfoBow6F_P4AmjptioeeO',
-    'sbp': '1cZCoNX1t68X1BoiyikYKRAV0vzo_3pGO',
-    'hazards': '1x_aerOM_LY7bw1CJdNC35zD2KkhJo4Sh',
-    'mag_targets': '1461Q0yswjO5qetkEfazB2JZMq5GHbSMd'
+# ── Per-hazard type: detailed engineering impact profiles ──────────────────────
+HAZARD_IMPACT_PROFILES = {
+    'Wreck': {
+        'cost_range': '£450K – £1.2M',
+        'cost_low': 450000, 'cost_high': 1200000,
+        'schedule_exposure': '6–14 weeks',
+        'next_survey': 'ROV inspection + sub-bottom profiling; 1:1000 scale sonar mosaic',
+        'contributions': [
+            ('Route Diversion Design', 'Probable 500–800m cable route deviation; structural design uplift required'),
+            ('Rock Dumping Contingency', 'Upstanding hull requires mattressing or concrete protection; probable £200–400K contingency'),
+            ('UXO Co-assessment', 'WWII wreck — UXO on or within hull; specialist dive or ROV sweep before burial design'),
+            ('Pre-FEED Investigation', 'Elevated requirement for ROV-based structural survey before engineering can proceed'),
+            ('Consent Extension', 'Route variation triggers re-consultation — estimated 4–8 week consent programme extension'),
+        ],
+        'temporal_note': 'Elevation increasing +1.7m since Aug 2025 (+81%) — wreck actively de-burying; risk trajectory: ↑ WORSENING'
+    },
+    'UXO': {
+        'cost_range': '£180K – £650K per item',
+        'cost_low': 180000, 'cost_high': 650000,
+        'schedule_exposure': '3–8 weeks per item',
+        'next_survey': 'Dedicated UXO survey: high-resolution mag + sub-bottom at 10m line spacing; MCM dive assessment',
+        'contributions': [
+            ('MCM Clearance Programme', 'Each confirmed UXO requires Explosive Ordnance Disposal (EOD) assessment and probable detonation or relocation'),
+            ('Burial Design Constraint', 'Standard jet-trench or plough burial prohibited within 50m of uncleared UXO — route or method change required'),
+            ('Consent Delay', 'UXO presence triggers Marine Licence amendment — 3–5 week delay per item if unresolved at application stage'),
+            ('Standby Vessel Cost', 'MCM vessel mobilisation: ~£85K/week; 2–4 week window typical per item'),
+            ('Pre-FEED Investigation', 'Elevated investigation requirement: burial depth, target geometry, corrosion state all needed before design can proceed'),
+        ],
+        'temporal_note': 'Mag amplitude +20% since Aug 2025 (180→217 nT) — increasing acoustic return suggests continued de-burial; risk trajectory: ↑ WORSENING'
+    },
+    'Pipeline': {
+        'cost_range': '£95K – £380K',
+        'cost_low': 95000, 'cost_high': 380000,
+        'schedule_exposure': '2–5 weeks',
+        'next_survey': 'Pipeline crossing design survey; third-party owner identification; CP survey for status assessment',
+        'contributions': [
+            ('Crossing Design', 'Pipeline crossing requires detailed engineering: concrete mattress, isolation joints, sleeve protection — typical £50–120K'),
+            ('Third-Party Consent', 'Pipeline owner identification and crossing agreement required before consent submission — can be on critical path'),
+            ('Free Span Mitigation', 'Three free spans identified — rock placement or grout bag infill required; ~£30–60K per span'),
+            ('Construction Method Change', 'Plough or jetting prohibited within crossing zone — HDD or manual lay required'),
+        ],
+        'temporal_note': 'Anomaly amplitude stable (+7% since Aug 2025) — pipeline condition consistent; risk trajectory: → STABLE'
+    },
+    'Gas': {
+        'cost_range': '£120K – £500K',
+        'cost_low': 120000, 'cost_high': 500000,
+        'schedule_exposure': '3–7 weeks',
+        'next_survey': 'Targeted SBP at 25m line spacing over gas zone; piezocone (CPTU) at 2–3 locations to characterise gas-bearing layer',
+        'contributions': [
+            ('Geotechnical Programme Uplift', 'Standard geotech scope inadequate — piezocone (CPTU) testing required to characterise gas-bearing layer; adds 2–4 weeks'),
+            ('Burial Method Restriction', 'Jetting and plough burial prohibited in confirmed gas zones — HDD or open-cut required; significant cost uplift'),
+            ('Gas Blow-out Contingency', 'Trenching risk of gas blow-out requires specialist equipment standby; contingency budget £50–120K'),
+            ('Pre-FEED Investigation', 'Gas volume and migration rate must be quantified before burial design can be finalised'),
+            ('Potential 3–5 Week Delay', 'If gas zone unresolved at FEED stage, consent submission delayed pending updated geotechnical report'),
+        ],
+        'temporal_note': 'Reflector acoustic strength +20% since Aug 2025 — stronger blanking = more fluid = more unstable subsurface; risk trajectory: ↑ WORSENING'
+    },
+    'Sand Wave': {
+        'cost_range': '£60K – £220K',
+        'cost_low': 60000, 'cost_high': 220000,
+        'schedule_exposure': '1–4 weeks',
+        'next_survey': 'Repeat SSS survey 6 months pre-construction to quantify migration rate; update bedform mobility model',
+        'contributions': [
+            ('Burial Depth Uplift', 'Active migration requires additional 0.5–1.0m burial target depth above standard design specification'),
+            ('Post-Installation Monitoring', 'Mandatory monitoring programme: quarterly AUV survey for 2 years post-installation; ~£40K/year'),
+            ('Timing Constraint', 'Construction window restricted to low-bedform-activity season (typically Oct–Feb in southern North Sea)'),
+            ('Repeat Survey Requirement', 'Bedform position at construction will differ from survey baseline — re-survey 3–6 months pre-lay required'),
+        ],
+        'temporal_note': 'Sand wave amplitude increased from 1.8m to 2.5m since Aug 2025 (+39%) — accelerating migration; risk trajectory: ↑ WORSENING'
+    },
+    'Hard Ground': {
+        'cost_range': '£200K – £750K',
+        'cost_low': 200000, 'cost_high': 750000,
+        'schedule_exposure': '4–10 weeks',
+        'next_survey': 'Rock type classification (drop core/ROV chip sampling); rock strength testing for cutter selection',
+        'contributions': [
+            ('Rock Cutting Requirement', 'Standard plough and jetting cannot penetrate — rock wheel cutter or HDD required; ~£350K mobilisation'),
+            ('Route Modification Assessment', 'Route deviation around rock outcrop may be more cost-effective than cutting — engineering comparison required'),
+            ('Vessel Day Rate Uplift', 'Rock-cutting vessel significantly higher day rate than standard lay barge; schedule-dependent cost'),
+            ('Mattress Protection', 'If cable laid over rock surface — concrete mattress protection required; ~£80–200K depending on length'),
+        ],
+        'temporal_note': 'Hard ground extent stable — no change detected between Aug 2025 and Mar 2026; risk trajectory: → STABLE'
+    },
+    'Boulder': {
+        'cost_range': '£80K – £300K',
+        'cost_low': 80000, 'cost_high': 300000,
+        'schedule_exposure': '2–6 weeks',
+        'next_survey': 'ROV/AUV ground-truth survey; individual boulder mapping at 1:500 scale; subsurface EM or SBP for buried boulder density',
+        'contributions': [
+            ('Boulder Clearance Programme', 'Dense boulder fields require individual clearance — specialist grab or hydraulic arm vessel; ~£60–120K'),
+            ('Burial Design Constraint', 'Burial not feasible between boulders — surface lay with mattress protection required in dense zones'),
+            ('Construction Duration Extension', 'Slow cable lay rate through boulder field adds ~1–2 weeks construction time'),
+            ('Post-Installation Risk', 'Cable not buried in boulder zone — elevated risk of third-party damage; monitoring required'),
+        ],
+        'temporal_note': 'Boulder field area grew +15% since Aug 2025 — active seabed erosion exposing new boulders; risk trajectory: ↑ WORSENING'
+    },
 }
 
-st.sidebar.markdown("---")
-st.sidebar.header("Quick Load")
+def get_hazard_impact(htype):
+    """Return the impact profile matching a hazard type string."""
+    for k, v in HAZARD_IMPACT_PROFILES.items():
+        if k in htype:
+            return k, v
+    return 'General', {
+        'cost_range': '£50K – £200K',
+        'cost_low': 50000, 'cost_high': 200000,
+        'schedule_exposure': '1–3 weeks',
+        'next_survey': 'Targeted re-survey with multi-sensor array at reduced line spacing',
+        'contributions': [('Mitigation Required', 'Engineering assessment and mitigation programme required before construction')],
+        'temporal_note': 'No temporal change data available for this hazard type'
+    }
 
-if st.sidebar.button("Load SSS", use_container_width=True):
-    prog = st.progress(0)
-    stat = st.empty()
-    count = 0
-    for i, fid in enumerate(FILE_IDS['sss']):
-        try:
-            stat.text(f"Loading {i+1}/{len(FILE_IDS['sss'])}...")
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.tif') as tmp:
-                download_from_gdrive(fid, tmp.name)
-                img, bounds = tif_to_png_base64(tmp.name, 'gray', max_px, True, False)
-                if img and bounds:
-                    st.session_state.raster_layers.append((img, bounds))
-                    count += 1
-                os.unlink(tmp.name)
-            prog.progress((i+1)/len(FILE_IDS['sss']))
-        except:
-            pass
-    prog.empty()
-    stat.empty()
-    st.success(f"✅ Loaded {count} SSS tiles")
-    st.rerun()
 
-if st.sidebar.button("Load MBES", use_container_width=True):
-    with tempfile.NamedTemporaryFile(delete=False, suffix='.tif') as tmp:
-        try:
-            download_from_gdrive(FILE_IDS['mbes'], tmp.name)
-            img, bounds = tif_to_png_base64(tmp.name, mbes_cmap, max_px, False, False)
-            if img and bounds:
-                st.session_state.raster_layers.append((img, bounds))
-                st.success("✅ MBES loaded")
-                st.rerun()
-            os.unlink(tmp.name)
-        except Exception as e:
-            st.error(f"Error: {e}")
-
-if st.sidebar.button("Load Mag", use_container_width=True):
-    with tempfile.NamedTemporaryFile(delete=False, suffix='.tif') as tmp:
-        try:
-            download_from_gdrive(FILE_IDS['mag'], tmp.name)
-            img, bounds = tif_to_png_base64(tmp.name, 'seismic', max_px, False, True)
-            if img and bounds:
-                st.session_state.mag_tif_layer = (img, bounds)
-                st.success("✅ Mag loaded")
-                st.rerun()
-            os.unlink(tmp.name)
-        except Exception as e:
-            st.error(f"Error: {e}")
-
-if st.sidebar.button("Load Turbines", use_container_width=True):
-    with tempfile.NamedTemporaryFile(delete=False, suffix='.json') as tmp:
-        try:
-            download_from_gdrive(FILE_IDS['turbines'], tmp.name)
-            st.session_state.turbines = gpd.read_file(tmp.name)
-            st.success(f"✅ Loaded {len(st.session_state.turbines)} turbines")
-            os.unlink(tmp.name)
-            st.rerun()
-        except Exception as e:
-            st.error(f"Error: {e}")
-
-if st.sidebar.button("Load SBP", use_container_width=True):
-    with tempfile.NamedTemporaryFile(delete=False, suffix='.json') as tmp:
-        try:
-            download_from_gdrive(FILE_IDS['sbp'], tmp.name)
-            st.session_state.sbp_lines = gpd.read_file(tmp.name)
-            st.success(f"✅ Loaded {len(st.session_state.sbp_lines)} lines")
-            os.unlink(tmp.name)
-            st.rerun()
-        except Exception as e:
-            st.error(f"Error: {e}")
-
-if st.sidebar.button("Load Hazards", use_container_width=True):
-    with tempfile.NamedTemporaryFile(delete=False, suffix='.json') as tmp:
-        try:
-            download_from_gdrive(FILE_IDS['hazards'], tmp.name)
-            gdf = gpd.read_file(tmp.name)
-            st.session_state.hazards = patch_hazard_coordinates(gdf)
-            st.success(f"✅ Loaded {len(st.session_state.hazards)} hazards (mag pins applied)")
-            os.unlink(tmp.name)
-            st.rerun()
-        except Exception as e:
-            st.error(f"Error: {e}")
-
-if st.sidebar.button("🧲 Load Mag Targets", use_container_width=True):
-    with tempfile.NamedTemporaryFile(delete=False, suffix='.csv') as tmp:
-        try:
-            download_from_gdrive(FILE_IDS['mag_targets'], tmp.name)
-            df = pd.read_csv(tmp.name)
-            # Normalise column names — handle case variants
-            df.columns = [c.strip() for c in df.columns]
-            col_map = {c: c for c in df.columns}
-            for c in df.columns:
-                cl = c.lower()
-                if cl in ('lat', 'latitude', 'y'):
-                    col_map[c] = 'Latitude'
-                elif cl in ('lon', 'long', 'longitude', 'x'):
-                    col_map[c] = 'Longitude'
-                elif cl in ('nt', 'ntesla', 'nanoTesla', 'amplitude', 'value', 'mag'):
-                    col_map[c] = 'nT'
-            df = df.rename(columns=col_map)
-            # Drop duplicate columns that arise when CSV already has Latitude/Longitude
-            # AND the rename maps X/Y to those same names
-            df = df.loc[:, ~df.columns.duplicated(keep='first')]
-            # Keep only the essential columns we need
-            keep = [c for c in ['Latitude', 'Longitude', 'nT'] if c in df.columns]
-            extra = [c for c in df.columns if c not in ['Latitude','Longitude','nT','Longitude_old','Latitude_old']]
-            df = df[keep + extra[:0]]  # keep only Lat/Lon/nT
-            df['nT'] = pd.to_numeric(df['nT'], errors='coerce').fillna(0.0)
-            df['Latitude']  = pd.to_numeric(df['Latitude'],  errors='coerce')
-            df['Longitude'] = pd.to_numeric(df['Longitude'], errors='coerce')
-            df = df.dropna(subset=['Latitude','Longitude'])
-            st.session_state.mag_targets = df
-            st.success(f"✅ Loaded {len(df)} mag targets (max {df['nT'].max():.1f} nT)")
-            os.unlink(tmp.name)
-            st.rerun()
-        except Exception as e:
-            st.error(f"Error loading mag targets: {e}")
-
-if st.sidebar.button("Clear", use_container_width=True):
-    st.session_state.raster_layers = []
-    st.session_state.hazards = None
-    st.session_state.turbines = None
-    st.session_state.sbp_lines = None
-    st.session_state.mag_tif_layer = None
-    st.session_state.mag_targets = None
-    st.rerun()
-
-# Financial dashboard
-if st.session_state.hazards is not None and len(st.session_state.hazards) > 0:
-    st.sidebar.markdown("---")
-    st.sidebar.header("Project Impact")
-    hazs = st.session_state.hazards
-    def pc(s):
-        try:
-            p = s.replace('£','').replace(',','').split('-')
-            return (float(p[0])+float(p[1] if len(p)>1 else p[0]))/2
-        except:
-            return 0
-    costs = hazs['cost'].apply(pc)
-    avg = costs.sum()
-    crit = len(hazs[hazs['risk']=='Critical'])
-    st.sidebar.metric("Mitigation Cost", f"£{avg/1000000:.0f}mm")
-    st.sidebar.metric("Critical Hazards", f"{crit}", delta="Immediate action")
-
-st.sidebar.markdown("---")
-st.sidebar.success("✅ System Operational")
-st.sidebar.info(f"📡 Updated: {datetime.now().strftime('%H:%M:%S')}")
+# ── Temporal change intelligence ──────────────────────────────────────────────
+# Survey dates: Aug 2025 (previous) → Mar 2026 (current)
+TEMPORAL_CHANGES = {
+    'WRK-001': {
+        'prev_date': 'Aug 2025', 'curr_date': 'Mar 2026',
+        'prev_score': 8.1, 'curr_score': 9.2,
+        'score_delta': +1.1,
+        'metrics': [
+            {'param': 'Hull Elevation', 'prev': '2.1m', 'curr': '3.8m', 'change': '+1.7m (+81%)', 'trend': '↑', 'severity': 'high'},
+            {'param': 'Scour Depth',    'prev': 'None', 'curr': '0.8m', 'change': 'New feature',   'trend': '↑', 'severity': 'high'},
+            {'param': 'Mag Amplitude',  'prev': '28,500 nT', 'curr': '32,791 nT', 'change': '+4,291 nT (+15%)', 'trend': '↑', 'severity': 'medium'},
+            {'param': 'Backscatter',    'prev': 'High', 'curr': 'Very High', 'change': '+12% intensity', 'trend': '↑', 'severity': 'medium'},
+        ],
+        'driver': 'Seabed erosion progressively de-burying hull — wreck becoming more exposed each survey cycle',
+        'trajectory': 'WORSENING',
+        'action': 'Prioritise ROV inspection before next design phase — structural state is deteriorating'
+    },
+    'WRK-002': {
+        'prev_date': 'Aug 2025', 'curr_date': 'Mar 2026',
+        'prev_score': 7.2, 'curr_score': 8.5,
+        'score_delta': +1.3,
+        'metrics': [
+            {'param': 'Mag Amplitude',  'prev': '2,800 nT', 'curr': '4,522 nT', 'change': '+1,722 nT (+61%)', 'trend': '↑', 'severity': 'high'},
+            {'param': 'SSS Expression', 'prev': 'Faint',    'curr': 'Prominent', 'change': 'Significantly stronger', 'trend': '↑', 'severity': 'high'},
+            {'param': 'Elevation',      'prev': '0.8m',     'curr': '2.0m',      'change': '+1.2m (+150%)', 'trend': '↑', 'severity': 'high'},
+        ],
+        'driver': 'Rapidly increasing exposure — anomaly was marginal in 2025, now wreck-class in 2026',
+        'trajectory': 'WORSENING RAPIDLY',
+        'action': 'Urgent investigation — rate of change suggests active de-burial; next survey within 3 months'
+    },
+    'UXO-001': {
+        'prev_date': 'Aug 2025', 'curr_date': 'Mar 2026',
+        'prev_score': 7.8, 'curr_score': 8.8,
+        'score_delta': +1.0,
+        'metrics': [
+            {'param': 'Mag Amplitude',   'prev': '180 nT', 'curr': '217 nT', 'change': '+37 nT (+21%)', 'trend': '↑', 'severity': 'high'},
+            {'param': 'Reflector Depth', 'prev': '1.2m',   'curr': '0.9m',   'change': '-0.3m (shallower)', 'trend': '↑', 'severity': 'high'},
+            {'param': 'Acoustic Strength','prev': 'Moderate','curr': 'Strong', 'change': '+20% — more fluid/unstable', 'trend': '↑', 'severity': 'high'},
+        ],
+        'driver': '21% increase in mag return + 0.3m reduction in burial depth: ordnance progressively de-burying; subsurface becoming more fluid (stronger acoustic return = weaker sediment)',
+        'trajectory': 'WORSENING',
+        'action': 'MCM pre-assessment required immediately — target within cable burial envelope and de-burying'
+    },
+    'UXO-002': {
+        'prev_date': 'Aug 2025', 'curr_date': 'Mar 2026',
+        'prev_score': 6.9, 'curr_score': 7.9,
+        'score_delta': +1.0,
+        'metrics': [
+            {'param': 'Position',       'prev': 'Fixed',    'curr': '~15m NE', 'change': 'Migrated — mobile target', 'trend': '↑', 'severity': 'high'},
+            {'param': 'Mag Amplitude',  'prev': '100 nT',   'curr': '141 nT',  'change': '+41 nT (+41%)', 'trend': '↑', 'severity': 'high'},
+            {'param': 'Burial State',   'prev': 'Buried',   'curr': 'Partially exposed', 'change': 'Exposure increasing', 'trend': '↑', 'severity': 'high'},
+        ],
+        'driver': 'Target mobility confirmed — 15m NE migration between surveys; bedform activity transporting ordnance along route',
+        'trajectory': 'WORSENING — MOBILE TARGET',
+        'action': 'Mobile UXO on dynamic seabed — position cannot be assumed stable at construction; re-survey mandatory within 60 days pre-lay'
+    },
+    'UXO-003': {
+        'prev_date': 'Aug 2025', 'curr_date': 'Mar 2026',
+        'prev_score': 5.8, 'curr_score': 6.3,
+        'score_delta': +0.5,
+        'metrics': [
+            {'param': 'Mag Amplitude',  'prev': '48 nT',   'curr': '51 nT',  'change': '+3 nT (+6%)', 'trend': '→', 'severity': 'low'},
+            {'param': 'Position',       'prev': 'Fixed',   'curr': 'Fixed',  'change': 'Stable within ±2m GPS', 'trend': '→', 'severity': 'low'},
+            {'param': 'Burial State',   'prev': 'Buried',  'curr': 'Buried', 'change': 'No change detected', 'trend': '→', 'severity': 'low'},
+        ],
+        'driver': 'Stable anomaly — minor amplitude increase within measurement uncertainty; no significant change between surveys',
+        'trajectory': 'STABLE',
+        'action': 'Monitor at construction phase — no immediate action required; flag for pre-lay re-survey'
+    },
+    'PPL-001': {
+        'prev_date': 'Aug 2025', 'curr_date': 'Mar 2026',
+        'prev_score': 6.8, 'curr_score': 7.2,
+        'score_delta': +0.4,
+        'metrics': [
+            {'param': 'Mag Amplitude',  'prev': '75 nT',   'curr': '80.7 nT', 'change': '+5.7 nT (+8%)', 'trend': '→', 'severity': 'low'},
+            {'param': 'Free Spans',     'prev': '2',       'curr': '3',       'change': '+1 new free span', 'trend': '↑', 'severity': 'medium'},
+            {'param': 'Exposure Length','prev': '720m',    'curr': '850m',    'change': '+130m (+18%)', 'trend': '↑', 'severity': 'medium'},
+        ],
+        'driver': 'Pipeline exposure increasing — new free span developed and exposed length growing due to seabed erosion around pipe',
+        'trajectory': 'SLOWLY WORSENING',
+        'action': 'Third-party crossing agreement should be initiated now — exposure trend suggests increasing complexity'
+    },
+    'default': {
+        'prev_date': 'Aug 2025', 'curr_date': 'Mar 2026',
+        'prev_score': None, 'curr_score': None,
+        'score_delta': 0,
+        'metrics': [
+            {'param': 'Position',    'prev': 'Established', 'curr': 'Consistent', 'change': 'Stable within GPS uncertainty', 'trend': '→', 'severity': 'low'},
+            {'param': 'Morphology',  'prev': 'Baseline',    'curr': 'Unchanged',  'change': 'No dimensional change detected', 'trend': '→', 'severity': 'low'},
+            {'param': 'Amplitude',   'prev': 'Baseline',    'curr': 'Consistent', 'change': 'Within sensor repeatability bounds', 'trend': '→', 'severity': 'low'},
+        ],
+        'driver': 'No significant temporal change detected between Aug 2025 and Mar 2026 surveys',
+        'trajectory': 'STABLE',
+        'action': 'Standard monitoring schedule — re-assess at next planned survey'
+    }
+}
 
 
 # ==============================================================================
-# PAGES - Same structure as before, now with InX branding
+# PAGE 2: PROJECT TIMELINE
 # ==============================================================================
 
-# Copy the full page implementations from app_MULTIPAGE_FINAL.py
-# Starting from line 449 to the end
-
-# ==============================================================================
 # PAGE 1: HAZARD MAP
 # ==============================================================================
 
@@ -1601,98 +1530,181 @@ if page == "🗺️ Hazard Map":
 
 
 # ==============================================================================
-# PAGE 2: PROJECT TIMELINE
-# ==============================================================================
 
 elif page == "📅 Project Timeline":
-    st.header("📅 Project Timeline Analysis")
-    
-    if st.session_state.hazards is not None and len(st.session_state.hazards) > 0:
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.subheader("📊 Original Timeline (No Hazards)")
-            fig_orig, mo_orig, _ = create_timeline_gantt(None, 'original')
-            st.plotly_chart(fig_orig, use_container_width=True)
-            st.metric("Duration", f"{mo_orig} months", delta=f"{mo_orig/12:.1f} years")
-        
-        with col2:
-            st.subheader("⚠️ Timeline with Hazard Impacts")
-            fig_haz, mo_haz, markers = create_timeline_gantt(st.session_state.hazards, 'with_hazards')
-            st.plotly_chart(fig_haz, use_container_width=True)
-            delay = mo_haz - mo_orig
-            st.metric("Duration", f"{mo_haz} months", delta=f"+{delay:.0f} mo delay", delta_color="inverse")
-        
-        st.markdown("---")
-        st.subheader("📊 Impact Breakdown")
-        
-        hazs = st.session_state.hazards
-        crit = len(hazs[hazs['risk']=='Critical'])
-        high = len(hazs[hazs['risk']=='High'])
-        med = len(hazs[hazs['risk']=='Medium'])
-        low = len(hazs[hazs['risk']=='Low'])
-        
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Project Delay", f"+{delay:.0f} months", delta=f"+{delay/mo_orig*100:.1f}% extension")
-        with col2:
-            total_cost = sum([m['cost'] for m in markers]) if markers else 0
-            st.metric("Mitigation Cost", f"£{total_cost/1e6:.2f}M", delta="From interventions")
-        with col3:
-            st.metric("Critical Interventions", f"{crit}", delta=f"{high} high risk" if high>0 else "")
-        
-        # Financial timeline
-        if markers:
-            st.markdown("---")
-            st.subheader("💰 Financial Commitments Timeline")
-            import plotly.express as px
-            mdf = pd.DataFrame(markers)
-            fig_cost = px.bar(mdf, x='month', y='cost', color='label',
-                title="Mitigation Costs by Project Month",
-                labels={'month': 'Project Month', 'cost': 'Cost (£)'},
-                color_discrete_map={mdf.iloc[i]['label']: mdf.iloc[i]['color'] for i in range(len(mdf))})
-            fig_cost.update_layout(height=400)
-            st.plotly_chart(fig_cost, use_container_width=True)
-        
-        # Risk breakdown with clickable navigation
-        st.markdown("---")
-        st.subheader("⚠️ Delay Contribution by Risk Level")
-        
-        st.info("💡 **Delay Calculation Methodology:** Critical hazards require resurvey + consent delays (1-2 months each). High risk requires additional engineering (0.5-1 month each). Medium/Low risks are addressed during normal phases with minimal delay.")
-        
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            cd = min(crit * 1.5, 12)  # Max 12 months from critical hazards
-            st.metric("Critical", f"+{cd:.1f} mo", delta=f"{crit} hazards")
-            if crit > 0:
-                if st.button(f"📍 View {crit} Critical Hazards", key='btn_crit', use_container_width=True):
-                    st.info("💡 Navigate to 'Hazard Map' page and filter by 'Critical' risk to see these hazards")
-        
-        with col2:
-            hd = min(high * 0.75, 6)  # Max 6 months from high risk
-            st.metric("High", f"+{hd:.1f} mo", delta=f"{high} hazards")
-            if high > 0:
-                if st.button(f"📍 View {high} High Hazards", key='btn_high', use_container_width=True):
-                    st.info("💡 Navigate to 'Hazard Map' page and filter by 'High' risk to see these hazards")
-        
-        with col3:
-            md = min(med * 0.3, 3)  # Max 3 months from medium risk
-            st.metric("Medium", f"+{md:.1f} mo", delta=f"{med} hazards")
-            if med > 0:
-                if st.button(f"📍 View {med} Medium Hazards", key='btn_med', use_container_width=True):
-                    st.info("💡 Navigate to 'Hazard Map' page and filter by 'Medium' risk to see these hazards")
-        
-        with col4:
-            ld = min(low * 0.1, 1)  # Max 1 month from low risk
-            st.metric("Low", f"+{ld:.1f} mo", delta=f"{low} hazards")
-            if low > 0:
-                if st.button(f"📍 View {low} Low Hazards", key='btn_low', use_container_width=True):
-                    st.info("💡 Navigate to 'Hazard Map' page and filter by 'Low' risk to see these hazards")
-    
-    else:
-        st.info("Load hazards to see timeline analysis")
+    st.header("📅 Project Timeline & Engineering Impact Analysis")
 
-# ==============================================================================
+    hazards_loaded = st.session_state.hazards is not None and len(st.session_state.hazards) > 0
+
+    if hazards_loaded:
+        hazs = st.session_state.hazards
+        crit = int(len(hazs[hazs['risk'] == 'Critical']))
+        high = int(len(hazs[hazs['risk'] == 'High']))
+        med  = int(len(hazs[hazs['risk'] == 'Medium']))
+        low  = int(len(hazs[hazs['risk'] == 'Low']))
+    else:
+        crit = high = med = low = 0
+
+    # ── View toggle ────────────────────────────────────────────────────────────
+    st.markdown("#### Schedule View")
+    view_col, _, kpi1, kpi2, kpi3 = st.columns([2, 0.3, 1.5, 1.5, 1.5])
+    with view_col:
+        view = st.radio("", ["Before Survey", "After Survey"],
+                        horizontal=True, key='timeline_view',
+                        label_visibility='collapsed')
+    view_key = 'before' if view == "Before Survey" else 'after'
+
+    fig, total_months, delays = create_timeline_gantt(
+        st.session_state.hazards if hazards_loaded else None,
+        view=view_key
+    )
+
+    # Baseline for comparison
+    _, base_months, _ = create_timeline_gantt(None, view='before')
+    schedule_delta = total_months - base_months
+
+    with kpi1:
+        st.metric("Total Duration", f"{total_months:.0f} months",
+                  delta=f"+{schedule_delta:.1f} mo" if view_key == 'after' and schedule_delta > 0 else None,
+                  delta_color="inverse")
+    with kpi2:
+        if hazards_loaded:
+            total_cost_low  = sum(HAZARD_IMPACT_PROFILES.get(
+                next((k for k in HAZARD_IMPACT_PROFILES if k in ht), 'x'), {}).get('cost_low', 50000)
+                for ht in hazs['hazard_type'])
+            total_cost_high = sum(HAZARD_IMPACT_PROFILES.get(
+                next((k for k in HAZARD_IMPACT_PROFILES if k in ht), 'x'), {}).get('cost_high', 200000)
+                for ht in hazs['hazard_type'])
+            st.metric("Cost Exposure", f"£{total_cost_low/1e6:.1f}M – £{total_cost_high/1e6:.1f}M")
+        else:
+            st.metric("Cost Exposure", "Load hazards")
+    with kpi3:
+        st.metric("Hazard Counts", f"{crit}C / {high}H / {med}M / {low}L")
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    # ── Legend for after view ──────────────────────────────────────────────────
+    if view_key == 'after':
+        st.caption("🟦 Baseline phase duration &nbsp;&nbsp; 🟧 Hazard-driven delay extension (hatched)")
+
+    st.markdown("---")
+
+    # ── Delay contribution breakdown ───────────────────────────────────────────
+    if view_key == 'after' and hazards_loaded:
+        st.markdown("#### ⏱️ Delay Contribution by Phase")
+
+        delay_rows = [(phase, ext) for phase, ext in delays.items() if ext > 0]
+        if delay_rows:
+            cols_d = st.columns(len(delay_rows))
+            for i, (phase, ext) in enumerate(delay_rows):
+                with cols_d[i]:
+                    drivers = []
+                    if 'UXO' in phase or 'Clearance' in phase:
+                        if crit > 0: drivers.append(f"{crit} Critical → MCM programme")
+                        if high > 0: drivers.append(f"{high} High → EOD assessment")
+                    elif 'FEED' in phase or 'Engineering' in phase:
+                        if crit > 0: drivers.append(f"{crit} Critical → route redesign")
+                        if high > 0: drivers.append(f"{high} High → engineering uplift")
+                        if med  > 0: drivers.append(f"{med} Medium → design checks")
+                    elif 'Consent' in phase:
+                        if crit > 0: drivers.append(f"{crit} Critical → Marine Licence amendment")
+                        if high > 0: drivers.append(f"{high} High → consent re-consultation")
+                    elif 'Geotech' in phase:
+                        if crit > 0: drivers.append(f"{crit} Critical → additional CPTU/borehole")
+                        if high > 0: drivers.append(f"{high} High → targeted geotech scope")
+                    else:
+                        if high > 0: drivers.append(f"{high} High → prep uplift")
+                        if med  > 0: drivers.append(f"{med} Medium → additional checks")
+
+                    driver_html = "".join(f"<li style='font-size:10px;margin:1px 0;'>{d}</li>" for d in drivers)
+                    st.markdown(
+                        f"<div style='background:#fff3e0;border-left:4px solid #FF4500;"
+                        f"padding:8px 10px;border-radius:4px;'>"
+                        f"<div style='font-size:12px;font-weight:bold;color:#c94000;'>{phase}</div>"
+                        f"<div style='font-size:18px;font-weight:bold;color:#FF4500;margin:2px 0;'>+{ext:.1f} months</div>"
+                        f"<ul style='margin:4px 0 0 0;padding-left:14px;'>{driver_html}</ul>"
+                        f"</div>", unsafe_allow_html=True
+                    )
+        else:
+            st.success("✅ No significant schedule delays — all hazards manageable within baseline programme")
+
+    st.markdown("---")
+
+    # ── Per-hazard engineering impact table ────────────────────────────────────
+    if hazards_loaded:
+        st.markdown("#### 🔍 Hazard-by-Hazard Engineering Impact")
+        st.caption("Expand each hazard type to see cost exposure, schedule risk, next survey action and detailed delay contributions.")
+
+        # Group by hazard type
+        htype_groups = {}
+        for _, row in hazs.iterrows():
+            ht = row.get('hazard_type', 'Unknown')
+            htype_groups.setdefault(ht, []).append(row)
+
+        for htype, rows in sorted(htype_groups.items(), key=lambda x: -max(r.get('risk_score', 0) for r in x[1])):
+            profile_key, profile = get_hazard_impact(htype)
+            count = len(rows)
+            max_score = max(r.get('risk_score', 0) for r in rows)
+            risk_levels = [r.get('risk', 'Unknown') for r in rows]
+            crit_c = risk_levels.count('Critical')
+            high_c = risk_levels.count('High')
+
+            # Risk colour
+            rc = '#CC0000' if crit_c > 0 else '#FF6600' if high_c > 0 else '#FFAA00'
+
+            with st.expander(
+                f"{'🔴' if crit_c > 0 else '🟠' if high_c > 0 else '🟡'} "
+                f"{htype} — {count} instance{'s' if count > 1 else ''} | "
+                f"Max score {max_score}/10 | {profile['cost_range']} | {profile['schedule_exposure']} schedule exposure",
+                expanded=(crit_c > 0)
+            ):
+                # KPI row
+                k1, k2, k3 = st.columns(3)
+                k1.metric("Cost Exposure",      profile['cost_range'])
+                k2.metric("Schedule Exposure",  profile['schedule_exposure'])
+                k3.metric("Instances in Route", f"{count} ({crit_c}C / {high_c}H)")
+
+                # Next survey recommendation
+                st.markdown(
+                    f"<div style='background:#e8f4fd;border-left:4px solid #0013C3;"
+                    f"padding:8px 12px;border-radius:4px;margin:8px 0;font-size:12px;'>"
+                    f"<b>📡 Recommended Next Survey Action:</b><br>{profile['next_survey']}</div>",
+                    unsafe_allow_html=True
+                )
+
+                # Temporal change note
+                # Find temporal data for any instance of this type
+                temp_note = profile.get('temporal_note', '')
+                traj_color = '#CC0000' if 'WORSENING' in temp_note else '#FF8C00' if 'SLOWLY' in temp_note else '#00AA44'
+                if temp_note:
+                    st.markdown(
+                        f"<div style='background:#fff8e1;border-left:4px solid {traj_color};"
+                        f"padding:8px 12px;border-radius:4px;margin:8px 0;font-size:12px;'>"
+                        f"<b>📈 Temporal Change (Aug 2025 → Mar 2026):</b><br>{temp_note}</div>",
+                        unsafe_allow_html=True
+                    )
+
+                # Contribution breakdown
+                st.markdown("**Delay & Cost Contribution Breakdown:**")
+                for contrib_name, contrib_detail in profile['contributions']:
+                    st.markdown(
+                        f"<div style='background:#f8f8f8;border-left:3px solid {rc};"
+                        f"padding:7px 10px;border-radius:3px;margin:4px 0;font-size:12px;'>"
+                        f"<b>{contrib_name}</b><br>"
+                        f"<span style='color:#555;'>{contrib_detail}</span>"
+                        f"</div>",
+                        unsafe_allow_html=True
+                    )
+
+                # Individual hazard IDs in this type
+                ids = [r.get('id', '?') for r in rows]
+                st.caption(f"Hazard IDs: {', '.join(ids)}")
+
+    else:
+        st.info("Load hazards from the sidebar to see engineering impact analysis.")
+
+
+
 # PAGE 3: EVIDENCE VIEWER
 # ==============================================================================
 
@@ -1907,11 +1919,66 @@ elif page == "🔬 Evidence Viewer":
                     st.info("SBP not used for this hazard")
             
             st.markdown("---")
-            st.subheader("🔄 Multi-Survey Change Detection")
-            st.info(f"📅 Comparison: Current survey (Nov 2024) vs Previous ({ev['change']['prev']})")
-            
-            for change in ev['change']['list']:
-                st.markdown(f"- {change}")
+            st.subheader("🔄 Temporal Change Intelligence")
+
+            tc = TEMPORAL_CHANGES.get(hid, TEMPORAL_CHANGES['default'])
+            prev_score = tc['prev_score'] if tc['prev_score'] is not None else hrow.get('risk_score', 5)
+            curr_score = tc['curr_score'] if tc['curr_score'] is not None else hrow.get('risk_score', 5)
+            delta_score = tc['score_delta']
+            traj = tc['trajectory']
+            traj_col = '#CC0000' if 'WORSENING' in traj else '#FF8C00' if 'SLOWLY' in traj else '#00AA44'
+
+            # ── Score comparison ──────────────────────────────────────────────
+            arrow_label = f"▲ {delta_score:+.1f}" if delta_score > 0 else (f"▼ {delta_score:+.1f}" if delta_score < 0 else "● 0.0")
+            score_curr_col = traj_col if delta_score != 0 else '#2E2E2E'
+
+            comp_html = (
+                "<div style='background:#f5f5f5;padding:12px 16px;border-radius:6px;"
+                "display:flex;gap:20px;align-items:center;margin-bottom:10px;'>"
+                f"<div style='text-align:center;'>"
+                f"<div style='font-size:10px;color:#999;'>Previous Survey</div>"
+                f"<div style='font-size:10px;color:#999;'>{tc['prev_date']}</div>"
+                f"<div style='font-size:30px;font-weight:bold;color:#8288A3;'>{prev_score:.1f}"
+                f"<span style='font-size:13px;'>/10</span></div></div>"
+                "<div style='font-size:24px;color:#ccc;'>→</div>"
+                f"<div style='text-align:center;'>"
+                f"<div style='font-size:10px;color:#999;'>Current Survey</div>"
+                f"<div style='font-size:10px;color:#999;'>{tc['curr_date']}</div>"
+                f"<div style='font-size:30px;font-weight:bold;color:{score_curr_col};'>{curr_score:.1f}"
+                f"<span style='font-size:13px;'>/10</span></div></div>"
+                "<div style='border-left:1px solid #ddd;padding-left:20px;flex:1;'>"
+                f"<div style='font-size:14px;font-weight:bold;color:{traj_col};'>{arrow_label} Risk Score Change</div>"
+                f"<div style='font-size:12px;font-weight:bold;color:{traj_col};margin-top:3px;'>{traj}</div>"
+                f"<div style='font-size:11px;color:#555;margin-top:4px;'>{tc['driver']}</div>"
+                "</div></div>"
+            )
+            st.markdown(comp_html, unsafe_allow_html=True)
+
+            # ── Parameter change table ────────────────────────────────────────
+            st.markdown("**Parameter Changes:**")
+            for m in tc['metrics']:
+                sev_col = '#CC0000' if m['severity'] == 'high' else '#FF8C00' if m['severity'] == 'medium' else '#888888'
+                trend_icon = '🔴' if m['trend'] == '↑' else '🟢' if m['trend'] == '↓' else '⚪'
+                row_html = (
+                    f"<div style='display:flex;align-items:center;gap:10px;padding:6px 10px;"
+                    f"background:#f8f8f8;border-radius:4px;margin:3px 0;border-left:3px solid {sev_col};'>"
+                    f"<span style='font-size:14px;'>{trend_icon}</span>"
+                    f"<span style='font-weight:bold;width:160px;font-size:12px;'>{m['param']}</span>"
+                    f"<span style='color:#777;font-size:11px;width:90px;'>{m['prev']}</span>"
+                    f"<span style='color:#aaa;font-size:11px;'> → </span>"
+                    f"<span style='font-weight:bold;font-size:12px;'>{m['curr']}</span>"
+                    f"<span style='color:{sev_col};font-size:11px;margin-left:8px;'>{m['change']}</span>"
+                    f"</div>"
+                )
+                st.markdown(row_html, unsafe_allow_html=True)
+
+            # ── Action recommendation ─────────────────────────────────────────
+            st.markdown(
+                f"<div style='background:#e8f4fd;border-left:4px solid #0013C3;"
+                f"padding:8px 12px;border-radius:4px;margin-top:10px;font-size:12px;'>"
+                f"<b>📋 Recommended Action:</b> {tc['action']}</div>",
+                unsafe_allow_html=True
+            )
     
     else:
         st.info("Load hazards to view evidence analysis")
