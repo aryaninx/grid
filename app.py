@@ -1213,6 +1213,17 @@ if st.sidebar.button("🧲 Load Mag Targets", use_container_width=True):
                 elif cl in ('nt', 'ntesla', 'nanoTesla', 'amplitude', 'value', 'mag'):
                     col_map[c] = 'nT'
             df = df.rename(columns=col_map)
+            # Drop duplicate columns that arise when CSV already has Latitude/Longitude
+            # AND the rename maps X/Y to those same names
+            df = df.loc[:, ~df.columns.duplicated(keep='first')]
+            # Keep only the essential columns we need
+            keep = [c for c in ['Latitude', 'Longitude', 'nT'] if c in df.columns]
+            extra = [c for c in df.columns if c not in ['Latitude','Longitude','nT','Longitude_old','Latitude_old']]
+            df = df[keep + extra[:0]]  # keep only Lat/Lon/nT
+            df['nT'] = pd.to_numeric(df['nT'], errors='coerce').fillna(0.0)
+            df['Latitude']  = pd.to_numeric(df['Latitude'],  errors='coerce')
+            df['Longitude'] = pd.to_numeric(df['Longitude'], errors='coerce')
+            df = df.dropna(subset=['Latitude','Longitude'])
             st.session_state.mag_targets = df
             st.success(f"✅ Loaded {len(df)} mag targets (max {df['nT'].max():.1f} nT)")
             os.unlink(tmp.name)
@@ -1569,6 +1580,7 @@ if page == "🗺️ Hazard Map":
             haz_group.add_to(m)
 
         folium.plugins.Fullscreen().add_to(m)
+        folium.plugins.MousePosition(position='bottomright', separator=' | ', prefix='📍', lat_formatter='function(num) {return L.Util.formatNum(num, 6);}', lng_formatter='function(num) {return L.Util.formatNum(num, 6);}').add_to(m)
         folium.LayerControl(collapsed=False).add_to(m)
         st_folium(m, width=1400, height=700)
 
@@ -1779,6 +1791,7 @@ elif page == "🔬 Evidence Viewer":
             ).add_to(m)
         
         folium.plugins.Fullscreen().add_to(m)
+        folium.plugins.MousePosition(position='bottomright', separator=' | ', prefix='📍', lat_formatter='function(num) {return L.Util.formatNum(num, 6);}', lng_formatter='function(num) {return L.Util.formatNum(num, 6);}').add_to(m)
         folium.LayerControl(collapsed=False).add_to(m)
         
         # Display map with clickable markers
