@@ -1414,7 +1414,12 @@ if page == "🗺️ Hazard Map":
         if show_magt and st.session_state.mag_targets is not None:
             try:
                 df_mt = st.session_state.mag_targets
-                df_filtered = df_mt[df_mt['nT'] >= nt_min_show].copy()
+                df_mt = df_mt.copy()
+                df_mt['nT'] = pd.to_numeric(df_mt['nT'], errors='coerce').fillna(0.0)
+                df_mt['Latitude']  = pd.to_numeric(df_mt['Latitude'],  errors='coerce')
+                df_mt['Longitude'] = pd.to_numeric(df_mt['Longitude'], errors='coerce')
+                df_mt = df_mt.dropna(subset=['Latitude','Longitude'])
+                df_filtered = df_mt[df_mt['nT'] >= float(nt_min_show)].copy()
 
                 # Colour scale: 5-20 nT = yellow, 20-100 = orange, 100+ = red
                 def nt_color(val):
@@ -1468,7 +1473,7 @@ if page == "🗺️ Hazard Map":
                             'weight': 0.5, 'fillOpacity': fo
                         },
                         popup=folium.Popup(popup_html_z, max_width=440),
-                        tooltip=f"Zone {zcell['cell_id']} | Score {zcell['score']}/10 | {zcell['narrative']['confidence']} confidence"
+                        tooltip=f"Zone {zcell['cell_id']} | Score {zcell['score']}/10 | {zcell['confidence']} confidence"
                     ).add_to(zones_group)
                 zones_group.add_to(m)
             except Exception as e:
