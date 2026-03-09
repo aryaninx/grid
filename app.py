@@ -229,23 +229,28 @@ def create_timeline_gantt(hazards_gdf, scenario='original'):
         curr += 2
         
         if critical > 0 or high > 0:
+            # Targeted resurvey for critical/high hazards
             phases.append(dict(Task="⚠️ Targeted Resurvey", Start=curr, Duration=3, Resource="Resurvey"))
             curr += 3
             phases.append(dict(Task="Mitigation Planning", Start=curr, Duration=2, Resource="Analysis"))
             curr += 2
         
-        geotech_delay = critical * 0.5
+        # Geotechnical survey - slight delay if critical hazards require route changes
+        geotech_delay = min(critical * 0.5, 2)  # Cap at 2 months max
         phases.append(dict(Task="Geotechnical Survey", Start=curr, Duration=4+geotech_delay, Resource="Survey"))
         curr += 4 + geotech_delay
         
-        design_ext = critical * 1.0 + high * 0.5
+        # Engineering design - extended if major route changes needed
+        design_ext = min(critical * 0.5 + high * 0.25, 3)  # Cap at 3 months max
         phases.append(dict(Task="Engineering Design", Start=curr, Duration=6+design_ext, Resource="Engineering"))
         curr += 6 + design_ext
         
-        consent_delay = critical * 2.0 + high * 1.0
+        # Consenting - delays for UXO clearance approvals and route variations
+        consent_delay = min(critical * 1.0 + high * 0.5, 6)  # Cap at 6 months max
         phases.append(dict(Task="Consenting & Planning", Start=curr, Duration=12+consent_delay, Resource="Planning"))
         curr += 12 + consent_delay
         
+        # Construction - no delay (hazards handled in design phase)
         phases.append(dict(Task="Construction", Start=curr, Duration=24, Resource="Construction"))
         curr += 24
         
@@ -296,23 +301,39 @@ def create_timeline_gantt(hazards_gdf, scenario='original'):
     
     # White theme for Gantt with better layout
     fig.update_layout(
-        height=600,  # Increased from 500 to prevent overlap
+        height=550,
         plot_bgcolor='#FFFFFF',
         paper_bgcolor='#FFFFFF',
         font=dict(color='#000000', family='Space Grotesk', size=11),
-        xaxis=dict(gridcolor='#E0E0E0', gridwidth=0.5, showgrid=True),
-        yaxis=dict(gridcolor='#E0E0E0', gridwidth=0.5, showgrid=True),
-        title=dict(font=dict(color='#000000', size=16)),
-        margin=dict(l=200, r=50, t=80, b=100),  # Increased margins to prevent overlap
+        xaxis=dict(
+            gridcolor='#E0E0E0', 
+            gridwidth=0.5, 
+            showgrid=True,
+            title="Timeline (Years)"
+        ),
+        yaxis=dict(
+            gridcolor='#E0E0E0', 
+            gridwidth=0.5, 
+            showgrid=True,
+            automargin=True
+        ),
+        title=dict(font=dict(color='#000000', size=14)),
+        margin=dict(l=250, r=50, t=60, b=120),  # More space for labels and legend
         showlegend=True,
         legend=dict(
             orientation="h",
-            yanchor="bottom",
-            y=-0.15,  # Position legend below chart
+            yanchor="top",
+            y=-0.2,  # Below the chart
             xanchor="center",
-            x=0.5
-        )
+            x=0.5,
+            font=dict(size=10)
+        ),
+        bargap=0.15
     )
+    
+    # Ensure x-axis is visible
+    fig.update_xaxes(fixedrange=False, showticklabels=True)
+    
     return fig, total_months, financial_markers if scenario=='with_hazards' else []
 
 def generate_evidence(haz):
@@ -364,6 +385,14 @@ def generate_evidence(haz):
             ev['sss'] = "**SSS Analysis:**\n- No surface expression (buried)\n- Seabed undisturbed\n- Subsurface anomaly present\n- Recent burial indicated\n- **Confidence: 85%**"
         elif 'Boulder' in htype:
             ev['sss'] = "**SSS Analysis:**\n- High backscatter clusters\n- Irregular morphology\n- Shadow confirms elevation\n- 45+ targets >0.5m\n- **Confidence: 92%**"
+        elif 'Sand Wave' in htype:
+            ev['sss'] = "**SSS Analysis:**\n- Sinusoidal bedform pattern\n- Wavelength: 15-30m\n- Asymmetric profiles indicate active migration\n- Ripple trains on lee slopes\n- **Confidence: 94%**"
+        elif 'Hard Ground' in htype or 'Hard' in htype:
+            ev['sss'] = "**SSS Analysis:**\n- Very high backscatter intensity\n- Rough texture across area\n- Outcrop visible at seabed\n- No sediment veneer\n- **Confidence: 96%**"
+        elif 'Pipeline' in htype:
+            ev['sss'] = "**SSS Analysis:**\n- Linear target 0.9m diameter\n- 850m exposed length detected\n- Consistent geometry\n- Acoustic shadow confirms elevation\n- **Confidence: 98%**"
+        elif 'Channel' in htype:
+            ev['sss'] = "**SSS Analysis:**\n- Linear depression visible in imagery\n- Lower backscatter in channel fill\n- Width: 80-150m at seabed\n- Subtle surface expression\n- **Confidence: 87%**"
     
     if 'MBES' in sensors:
         if 'Wreck' in htype:
@@ -372,18 +401,36 @@ def generate_evidence(haz):
             ev['mbes'] = "**MBES Analysis:**\n- 45+ elevation peaks\n- Height: 0.5-2.3m range\n- Field: 250×180m\n- RMS roughness: 0.8m\n- **Confidence: 90%**"
         elif 'Gas' in htype:
             ev['mbes'] = "**MBES Analysis:**\n- 15 pockmarks detected\n- Diameter: 5-20m\n- Depth: 0.5-1.2m\n- Clustered pattern\n- **Confidence: 92%**"
+        elif 'Sand Wave' in htype:
+            ev['mbes'] = "**MBES Analysis:**\n- Amplitude: 0.8-2.5m\n- Wavelength: 20-40m\n- Asymmetric crests indicate migration\n- Extends 800m × 600m\n- **Confidence: 93%**"
+        elif 'Hard Ground' in htype or 'Hard' in htype:
+            ev['mbes'] = "**MBES Analysis:**\n- Very high roughness (RMS >1.5m)\n- Irregular surface topography\n- No sediment drape visible\n- Backscatter intensity very high\n- **Confidence: 95%**"
+        elif 'Pipeline' in htype:
+            ev['mbes'] = "**MBES Analysis:**\n- Elevation: 0.6m above seabed\n- Linear feature 850m length\n- Diameter: 0.9m consistent\n- Free spans detected: 3 locations\n- **Confidence: 97%**"
+        elif 'Channel' in htype:
+            ev['mbes'] = "**MBES Analysis:**\n- V-shaped depression: 4-8m deep\n- Width: 80-150m\n- Length: >1km (extends beyond survey)\n- Subtle expression at seabed\n- **Confidence: 89%**"
     
     if 'Magnetometer' in sensors:
         if 'Wreck' in htype:
             ev['mag'] = "**Mag Analysis:**\n- Dipole: 245nT\n- Large ferrous mass\n- Aligned with SSS/MBES\n- Steel structure\n- **Confidence: 92%**"
         elif 'UXO' in htype:
             ev['mag'] = "**Mag Analysis:**\n- Dipole: 187nT\n- Ordnance signature\n- WW2 UXO pattern\n- Buried 1.2m depth\n- **Confidence: 92%**"
+        elif 'Pipeline' in htype:
+            ev['mag'] = "**Mag Analysis:**\n- Linear anomaly 850m length\n- Magnitude: 15-25nT (steel pipe)\n- Consistent along route\n- Confirms ferrous material\n- **Confidence: 89%**"
     
     if 'SBP' in sensors:
         if 'Wreck' in htype:
-            ev['sbp'] = "**SBP Analysis:**\n- Hard reflector\n- No penetration\n- Solid metallic\n- Confirms obstacle\n- **Confidence: 85%**"
+            ev['sbp'] = "**SBP Analysis:**\n- Hard reflector at seabed\n- No acoustic penetration\n- Solid metallic structure\n- Confirms upstanding obstacle\n- **Confidence: 85%**"
         elif 'Gas' in htype:
-            ev['sbp'] = "**SBP Analysis:**\n- Acoustic blanking\n- Bright spots present\n- Gas accumulation\n- 2-8m depth zone\n- **Confidence: 94%**"
+            ev['sbp'] = "**SBP Analysis:**\n- Acoustic blanking below 2m\n- Bright spots present\n- Gas accumulation confirmed\n- 2-8m depth zone affected\n- **Confidence: 94%**"
+        elif 'Channel' in htype:
+            ev['sbp'] = "**SBP Analysis:**\n- V-shaped buried channel\n- Depth below seabed: 4-8m\n- Infill: soft sediment (low velocity)\n- Base reflector visible\n- **Confidence: 91%**"
+        elif 'Sand Wave' in htype:
+            ev['sbp'] = "**SBP Analysis:**\n- Mobile sand detected (transparent)\n- No hard reflectors\n- Sediment thickness varies 1-3m\n- Active bedform migration indicated\n- **Confidence: 88%**"
+        elif 'Hard Ground' in htype or 'Hard' in htype:
+            ev['sbp'] = "**SBP Analysis:**\n- Hard reflector at <0.5m depth\n- No acoustic penetration\n- Rock surface confirmed\n- No sediment cover\n- **Confidence: 93%**"
+        elif 'Pipeline' in htype:
+            ev['sbp'] = "**SBP Analysis:**\n- Hard reflector at seabed\n- Linear target matches SSS/MBES\n- No burial detected\n- Fully exposed pipeline\n- **Confidence: 90%**"
     
     score = haz.get('risk_score', 0)
     if score >= 9.0:
@@ -748,30 +795,33 @@ elif page == "📅 Project Timeline":
         # Risk breakdown with clickable navigation
         st.markdown("---")
         st.subheader("⚠️ Delay Contribution by Risk Level")
+        
+        st.info("💡 **Delay Calculation Methodology:** Critical hazards require resurvey + consent delays (1-2 months each). High risk requires additional engineering (0.5-1 month each). Medium/Low risks are addressed during normal phases with minimal delay.")
+        
         col1, col2, col3, col4 = st.columns(4)
         with col1:
-            cd = crit * 1.5
+            cd = min(crit * 1.5, 12)  # Max 12 months from critical hazards
             st.metric("Critical", f"+{cd:.1f} mo", delta=f"{crit} hazards")
             if crit > 0:
                 if st.button(f"📍 View {crit} Critical Hazards", key='btn_crit', use_container_width=True):
                     st.info("💡 Navigate to 'Hazard Map' page and filter by 'Critical' risk to see these hazards")
         
         with col2:
-            hd = high * 0.75
+            hd = min(high * 0.75, 6)  # Max 6 months from high risk
             st.metric("High", f"+{hd:.1f} mo", delta=f"{high} hazards")
             if high > 0:
                 if st.button(f"📍 View {high} High Hazards", key='btn_high', use_container_width=True):
                     st.info("💡 Navigate to 'Hazard Map' page and filter by 'High' risk to see these hazards")
         
         with col3:
-            md = med * 0.3
+            md = min(med * 0.3, 3)  # Max 3 months from medium risk
             st.metric("Medium", f"+{md:.1f} mo", delta=f"{med} hazards")
             if med > 0:
                 if st.button(f"📍 View {med} Medium Hazards", key='btn_med', use_container_width=True):
                     st.info("💡 Navigate to 'Hazard Map' page and filter by 'Medium' risk to see these hazards")
         
         with col4:
-            ld = low * 0.1
+            ld = min(low * 0.1, 1)  # Max 1 month from low risk
             st.metric("Low", f"+{ld:.1f} mo", delta=f"{low} hazards")
             if low > 0:
                 if st.button(f"📍 View {low} Low Hazards", key='btn_low', use_container_width=True):
