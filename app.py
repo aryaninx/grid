@@ -1354,8 +1354,8 @@ FILE_IDS = {
 }
 
 st.sidebar.header(" Data Layers")
-basemap   = st.sidebar.selectbox("Basemap", ['Esri Satellite', 'OpenStreetMap'], index=0)
-mbes_cmap = st.sidebar.selectbox("MBES Colormap", ['ocean', 'viridis', 'seismic'], index=0)
+basemap   = st.sidebar.radio("Basemap", ['Esri Satellite', 'OpenStreetMap'], index=0, key='basemap_radio')
+mbes_cmap = st.sidebar.radio("MBES Colormap", ['ocean', 'viridis', 'seismic'], index=0, key='cmap_radio')
 quality   = st.sidebar.radio("Quality", ["Fast (500px)", "Good (1000px)", "High (2000px)"], index=1)
 max_px    = {"Fast (500px)": 500, "Good (1000px)": 1000, "High (2000px)": 2000}[quality]
 
@@ -1970,10 +1970,22 @@ elif page == "Project Timeline":
 
             risk_icon = '🔴' if crit_c > 0 else '🟠' if high_c > 0 else '🟡'
             inst_word = f"{count} instance{'s' if count > 1 else ''}"
-            with st.expander(
-                f"{risk_icon}  {htype}   |   {inst_word}   |   Max score {max_score}/10",
-                expanded=(crit_c > 0)
-            ):
+            _exp_key = f"exp_{htype.replace(' ','_').replace('/','_')}"
+            if _exp_key not in st.session_state:
+                st.session_state[_exp_key] = bool(crit_c > 0)
+            _is_open = st.session_state[_exp_key]
+            _arrow = '▼' if _is_open else '▶'
+            _btn_col, _ = st.columns([10, 1])
+            with _btn_col:
+                if st.button(
+                    f"{_arrow}  {risk_icon}  {htype}   |   {inst_word}   |   Max score {max_score}/10",
+                    key=f"btn_{_exp_key}",
+                    use_container_width=True
+                ):
+                    st.session_state[_exp_key] = not _is_open
+                    st.rerun()
+
+            if st.session_state[_exp_key]:
                 # KPI row
                 k1, k2, k3 = st.columns(3)
                 k1.metric("Cost Exposure",      profile['cost_range'])
@@ -1989,7 +2001,6 @@ elif page == "Project Timeline":
                 )
 
                 # Temporal change note
-                # Find temporal data for any instance of this type
                 temp_note = profile.get('temporal_note', '')
                 traj_color = '#CC0000' if 'WORSENING' in temp_note else '#FF8C00' if 'SLOWLY' in temp_note else '#00AA44'
                 if temp_note:
@@ -2015,6 +2026,7 @@ elif page == "Project Timeline":
                 # Individual hazard IDs in this type
                 ids = [r.get('id', '?') for r in rows]
                 st.caption(f"Hazard IDs: {', '.join(ids)}")
+                st.markdown("---")
 
     else:
         st.info("⏳ Loading survey data automatically. If the timeline is empty, navigate away and back.")
@@ -2030,7 +2042,7 @@ elif page == "Evidence Viewer":
     if st.session_state.hazards is not None and len(st.session_state.hazards) > 0:
         # Hazard TYPE selector (not individual hazard)
         hazard_types = sorted(st.session_state.hazards['hazard_type'].unique())
-        selected_type = st.selectbox("Select Hazard Type to Analyze:", hazard_types, key='ev_type_select')
+        selected_type = st.radio("Select Hazard Type:", hazard_types, key='ev_type_select', horizontal=True)
         
         # Filter hazards by type
         type_hazards = st.session_state.hazards[st.session_state.hazards['hazard_type'] == selected_type]
@@ -2151,11 +2163,12 @@ elif page == "Evidence Viewer":
                     default_idx = i
                     break
         
-        selected_hazard = st.selectbox(
-            "Select specific hazard for detailed analysis:", 
-            haz_list, 
+        selected_hazard = st.radio(
+            "Select hazard for detailed analysis:",
+            haz_list,
             index=default_idx,
-            key='ev_detail_select'
+            key='ev_detail_select',
+            horizontal=True,
         )
         
         if selected_hazard:
