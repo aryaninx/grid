@@ -63,6 +63,12 @@ st.markdown(f"""
     .leaflet-popup-content * {{
         font-family: 'Space Grotesk', sans-serif !important;
     }}
+    /* Remove native browser select arrow — Streamlit adds its own chevron */
+    div[data-baseweb="select"] select {{
+        -webkit-appearance: none;
+        -moz-appearance: none;
+        appearance: none;
+    }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -612,10 +618,10 @@ def get_risk_zones_gdf():
     # Pre-clipped polygon vertices (lon, lat) — computed by Sutherland-Hodgman
     # against the survey boundary so no zone overhangs the survey area edges
     CLIPPED_COORDS = {
-        'RZ-C1':  [(-0.009, 53.775156), (-0.009, 53.773), (0.02, 53.773), (0.02, 53.778478)],
-        'RZ-C2':  [(0.02, 53.778478), (0.02, 53.774), (0.033513, 53.774), (0.055, 53.776269), (0.055, 53.782486)],
-        'RZ-C3':  [(0.055, 53.782486), (0.055, 53.776269), (0.09, 53.779965), (0.09, 53.786495)],
-        'RZ-C4':  [(0.09, 53.786495), (0.09, 53.779965), (0.114, 53.7825), (0.114, 53.789), (0.11187, 53.789)],
+        'RZ-C1':  [(-0.009, 53.774156), (0.020, 53.777545), (0.020, 53.780445), (-0.009, 53.777056)],
+        'RZ-C2':  [(0.020, 53.777545), (0.055, 53.781634), (0.055, 53.784534), (0.020, 53.780445)],
+        'RZ-C3':  [(0.055, 53.781634), (0.090, 53.785723), (0.090, 53.788623), (0.055, 53.784534)],
+        'RZ-C4':  [(0.090, 53.785723), (0.114, 53.788527), (0.114, 53.791427), (0.090, 53.788623)],
         'RZ-SW1': [(0.114, 53.788318), (0.129534, 53.774), (0.138, 53.774), (0.138, 53.796), (0.114, 53.796)],
         'RZ-SW2': [(0.11, 53.797), (0.125, 53.797), (0.125, 53.806), (0.11, 53.806)],
         'RZ-SW3': [(0.095, 53.80583), (0.10675, 53.795), (0.115, 53.795), (0.115, 53.808), (0.095, 53.808)],
@@ -729,7 +735,7 @@ def risk_zone_popup(cell):
     conf_color  = {'High':'#00AA44','Moderate':'#FF8C00','Low':'#CC0000'}.get(conf, '#888')
     donut_html  = _donut_svg(drivers, score)
 
-    return f"""<div style="width:480px;font-family:Arial;font-size:12px;max-height:580px;overflow-y:auto;">
+    return f"""<div style="width:430px;font-family:Arial;font-size:12px;max-height:580px;overflow-y:auto;">
   <div style="padding:10px 14px;background:{band_col};color:{txt_col};border-radius:6px 6px 0 0;">
     <div style="font-size:15px;font-weight:bold;">{label} <span style="font-size:10px;opacity:0.75;">({cell_id})</span></div>
     <div style="font-size:11px;margin-top:2px;">{band} &nbsp;·&nbsp; Score: <b>{score}/10</b> &nbsp;·&nbsp; Dominant: <b>{dom_label}</b></div>
@@ -947,7 +953,7 @@ def create_timeline_gantt(hazards_gdf, view='before'):
 
         # Extension bar (hazard delay) shown in orange
         if view == 'after' and p['ext'] > 0:
-            ext_hover = (f"<b>Hazard Delay: {p['task']}</b><br>"
+            ext_hover = (f"<b>⚠️ Hazard Delay: {p['task']}</b><br>"
                          f"+{p['ext']:.1f} months from {crit}C/{high}H/{med}M/{low}L hazards")
             fig.add_trace(go.Bar(
                 name=f"{p['task']} delay",
@@ -1347,14 +1353,14 @@ FILE_IDS = {
     'mag_targets': '1461Q0yswjO5qetkEfazB2JZMq5GHbSMd',
 }
 
-st.sidebar.header("Data Layers")
+st.sidebar.header(" Data Layers")
 basemap   = st.sidebar.selectbox("Basemap", ['Esri Satellite', 'OpenStreetMap'], index=0)
 mbes_cmap = st.sidebar.selectbox("MBES Colormap", ['ocean', 'viridis', 'seismic'], index=0)
 quality   = st.sidebar.radio("Quality", ["Fast (500px)", "Good (1000px)", "High (2000px)"], index=1)
 max_px    = {"Fast (500px)": 500, "Good (1000px)": 1000, "High (2000px)": 2000}[quality]
 
 st.sidebar.markdown("---")
-st.sidebar.header("Quick Load")
+st.sidebar.header(" Quick Load")
 
 if st.sidebar.button("Load MBES", use_container_width=True):
     with st.spinner("Downloading MBES..."):
@@ -1460,7 +1466,7 @@ if st.sidebar.button("Load SBP", use_container_width=True):
             except Exception as e:
                 st.sidebar.error(f"Error: {e}")
 
-if st.sidebar.button("Clear All", use_container_width=True):
+if st.sidebar.button(" Clear All", use_container_width=True):
     st.session_state.raster_layers = []
     st.session_state.hazards       = None
     st.session_state.turbines      = None
@@ -1474,14 +1480,14 @@ if st.session_state.hazards is not None:
     crit_n = len(hazs[hazs['risk']=='Critical'])
     high_n = len(hazs[hazs['risk']=='High'])
     st.sidebar.markdown("---")
-    st.sidebar.header("Project Impact")
+    st.sidebar.header(" Project Impact")
     st.sidebar.metric("Critical Hazards", crit_n, delta="Immediate action" if crit_n else None)
     st.sidebar.metric("High Risk",        high_n, delta="Engineering uplift" if high_n else None)
     st.sidebar.metric("Total Hazards",    len(hazs))
 
 st.sidebar.markdown("---")
-st.sidebar.success("System Operational")
-st.sidebar.caption(f"{datetime.now().strftime('%d %b %Y  %H:%M')}")
+st.sidebar.success("✅ System Operational")
+st.sidebar.caption(f"📡 {datetime.now().strftime('%d %b %Y  %H:%M')}")
 
 
 # ==============================================================================
@@ -1495,7 +1501,7 @@ if page == "Hazard Map":
     # Show any auto-load errors
     if st.session_state.get("auto_load_errors"):
         for _err in st.session_state.auto_load_errors:
-            st.warning(f"Auto-load: {_err}")
+            st.warning(f"⚠️ Auto-load: {_err}")
 
     
     if st.session_state.hazards is not None and len(st.session_state.hazards) > 0:
@@ -1526,7 +1532,7 @@ if page == "Hazard Map":
             nt_col1, nt_col2 = st.columns([2,1])
             with nt_col1:
                 nt_band = st.select_slider(
-                    "nT Anomaly Threshold — show targets above:",
+                    " nT Anomaly Threshold — show targets above:",
                     options=[5, 10, 20, 50, 100, 200, 500],
                     value=5,
                     key='nt_thresh'
@@ -1545,11 +1551,11 @@ if page == "Hazard Map":
 
         # ── Metrics ──────────────────────────────────────────────────────────
         col1, col2, col3, col4, col5 = st.columns(5)
-        col1.metric("Critical", len(filtered[filtered['risk']=='Critical']))
-        col2.metric("High",     len(filtered[filtered['risk']=='High']))
-        col3.metric("Medium",   len(filtered[filtered['risk']=='Medium']))
-        col4.metric("Low",      len(filtered[filtered['risk']=='Low']))
-        col5.metric("Total",    len(filtered))
+        col1.metric("🔴 Critical", len(filtered[filtered['risk']=='Critical']))
+        col2.metric("🟠 High",     len(filtered[filtered['risk']=='High']))
+        col3.metric("🟡 Medium",   len(filtered[filtered['risk']=='Medium']))
+        col4.metric("🟢 Low",      len(filtered[filtered['risk']=='Low']))
+        col5.metric("📍 Total",    len(filtered))
 
         # ── Map centre ───────────────────────────────────────────────────────
         all_bounds = [b for _, b in st.session_state.raster_layers if b]
@@ -1560,13 +1566,13 @@ if page == "Hazard Map":
             center_lat, center_lon = 53.81, 0.13
 
         if basemap == 'Esri Satellite':
-            m = folium.Map([center_lat, center_lon], zoom_start=13, tiles=None)
+            m = folium.Map([center_lat, center_lon], zoom_start=13, tiles=None, control_scale=True)
             folium.TileLayer(
                 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
                 attr='Esri', name='Esri Satellite'
             ).add_to(m)
         else:
-            m = folium.Map([center_lat, center_lon], zoom_start=13)
+            m = folium.Map([center_lat, center_lon], zoom_start=13, control_scale=True)
 
         # ── SSS raster tiles ─────────────────────────────────────────────────
         if show_sss and st.session_state.raster_layers:
@@ -1622,7 +1628,7 @@ if page == "Hazard Map":
                         turbine_popup = f"""
                         <div style="width:280px; font-family:Arial; font-size:13px;">
                             <h3 style="margin:0; padding:8px 10px; background:#0013C3; color:white; border-radius:5px 5px 0 0;">
-                                Turbine {tref}
+                                 Turbine {tref}
                             </h3>
                             <div style="padding:10px;">
                                 <p style="margin:4px 0;"><b>Ref / Name:</b> {tref}</p>
@@ -1671,7 +1677,7 @@ if page == "Hazard Map":
                     popup_t = f"""
                     <div style="width:200px; font-family:Arial; font-size:12px;">
                         <h4 style="margin:0; padding:6px 8px; background:{c}; color:white; border-radius:4px 4px 0 0;">
-                            Mag Anomaly
+                             Mag Anomaly
                         </h4>
                         <div style="padding:8px;">
                             <p style="margin:3px 0;"><b>Amplitude:</b> {nt_val:.1f} nT</p>
@@ -1684,7 +1690,7 @@ if page == "Hazard Map":
                         [lat, lon], radius=radius,
                         color=c, fill=True, fillColor=c, fillOpacity=0.75, weight=1,
                         popup=folium.Popup(popup_t, max_width=220),
-                        tooltip=f"{nt_val:.1f} nT"
+                        tooltip=f" {nt_val:.1f} nT"
                     ).add_to(mag_t_group)
                 mag_t_group.add_to(m)
             except Exception as e:
@@ -1752,7 +1758,7 @@ if page == "Hazard Map":
                 _title_text = '#1a1a1a' if risk == 'Critical' else 'white'
                 # Risk badge accent colour for border only — text always dark
                 _risk_accent = {'Critical':'#b8d900','High':'#0013C3','Medium':'#6a7a68','Low':'#5a6080'}.get(risk,'#888')
-                _risk_label  = {'Critical':'CRITICAL','High':'HIGH','Medium':'MEDIUM','Low':'LOW'}.get(risk, risk)
+                _risk_label  = {'Critical':'🔴 CRITICAL','High':'🟠 HIGH','Medium':'🟡 MEDIUM','Low':'🟢 LOW'}.get(risk, risk)
 
                 popup_html = f"""
                 <div style="width:340px; font-family:Arial, sans-serif; font-size:13px; color:#1a1a1a; line-height:1.5;">
@@ -1812,22 +1818,21 @@ if page == "Hazard Map":
 
         folium.plugins.Fullscreen().add_to(m)
         folium.plugins.MousePosition(position='bottomright', separator=' | ', prefix='📍', lat_formatter='function(num) {return L.Util.formatNum(num, 6);}', lng_formatter='function(num) {return L.Util.formatNum(num, 6);}').add_to(m)
-        folium.plugins.MeasureControl(position='bottomleft', primary_length_unit='meters', secondary_length_unit='kilometers', primary_area_unit='sqmeters').add_to(m)
         folium.LayerControl(collapsed=False).add_to(m)
         st_folium(m, width=1400, height=700)
 
         # ── Hazard register table ─────────────────────────────────────────────
         st.markdown("---")
-        st.subheader("Hazard Register")
+        st.subheader("📋 Hazard Register")
         cols = ['id','hazard_type','name','risk','distance_to_turbine_m','investigation_timeline','cost']
         st.dataframe(filtered[cols], use_container_width=True, height=300)
         csv = filtered.to_csv(index=False)
-        st.download_button("Download CSV", csv, f"hazards_{datetime.now().strftime('%Y%m%d')}.csv", "text/csv")
+        st.download_button(" Download CSV", csv, f"hazards_{datetime.now().strftime('%Y%m%d')}.csv", "text/csv")
 
         # ── Mag Targets summary table (if loaded) ────────────────────────────
         if st.session_state.mag_targets is not None and show_magt:
             st.markdown("---")
-            st.subheader("Magnetic Anomaly Summary")
+            st.subheader(" Magnetic Anomaly Summary")
             df_mt = st.session_state.mag_targets
             df_show = df_mt[df_mt['nT'] >= nt_min_show].sort_values('nT', ascending=False).reset_index(drop=True)
             col_a, col_b, col_c = st.columns(3)
@@ -1843,7 +1848,7 @@ if page == "Hazard Map":
 # ==============================================================================
 
 elif page == "Project Timeline":
-    st.header("Project Timeline & Engineering Impact Analysis")
+    st.header("📅 Project Timeline & Engineering Impact Analysis")
 
     hazards_loaded = st.session_state.hazards is not None and len(st.session_state.hazards) > 0
 
@@ -2019,8 +2024,8 @@ elif page == "Project Timeline":
 # PAGE 3: EVIDENCE VIEWER
 # ==============================================================================
 
-elif page == "🔬 Evidence Viewer":
-    st.header("🔬 Evidence Viewer - Hazard Analysis")
+elif page == "Evidence Viewer":
+    st.header("Evidence Viewer - Hazard Analysis")
     
     if st.session_state.hazards is not None and len(st.session_state.hazards) > 0:
         # Hazard TYPE selector (not individual hazard)
@@ -2036,7 +2041,7 @@ elif page == "🔬 Evidence Viewer":
         center_lat = type_hazards.geometry.y.mean()
         center_lon = type_hazards.geometry.x.mean()
         
-        m = folium.Map([center_lat, center_lon], zoom_start=13, tiles=None)
+        m = folium.Map([center_lat, center_lon], zoom_start=13, tiles=None, control_scale=True)
         folium.TileLayer(
             tiles='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
             attr='Esri',
@@ -2076,7 +2081,7 @@ elif page == "🔬 Evidence Viewer":
                     folium.CircleMarker(
                         [lat_t, lon_t], radius=min(4 + nt_val/40, 14),
                         color=c, fill=True, fillColor=c, fillOpacity=0.7, weight=1,
-                        tooltip=f"{nt_val:.1f} nT"
+                        tooltip=f" {nt_val:.1f} nT"
                     ).add_to(mag_ev_group)
                 mag_ev_group.add_to(m)
             except:
@@ -2108,7 +2113,6 @@ elif page == "🔬 Evidence Viewer":
         folium.plugins.Fullscreen().add_to(m)
         folium.plugins.MousePosition(position='bottomright', separator=' | ', prefix='📍', lat_formatter='function(num) {return L.Util.formatNum(num, 6);}', lng_formatter='function(num) {return L.Util.formatNum(num, 6);}').add_to(m)
         folium.LayerControl(collapsed=False).add_to(m)
-        folium.plugins.MeasureControl(position='bottomleft', primary_length_unit='meters', secondary_length_unit='kilometers', primary_area_unit='sqmeters').add_to(m)
         
         # Display map with clickable markers
         map_data = st_folium(m, width=1400, height=500, key='evidence_map')
@@ -2133,7 +2137,7 @@ elif page == "🔬 Evidence Viewer":
         
         # Detailed Evidence Analysis
         st.markdown("---")
-        st.subheader("Detailed Evidence Analysis")
+        st.subheader("🔍 Detailed Evidence Analysis")
         
         # Get the hazard to display (from click or dropdown)
         haz_list = [f"{row['id']}: {row.get('name','Unknown')}" for _, row in type_hazards.iterrows()]
@@ -2162,11 +2166,11 @@ elif page == "🔬 Evidence Viewer":
             ev = generate_evidence(hrow)
             
             st.markdown("---")
-            st.subheader("Risk Score Justification")
+            st.subheader("⚠️ Risk Score Justification")
             st.markdown(ev['risk_just'])
             
             st.markdown("---")
-            st.subheader("Multi-Sensor Detection Evidence")
+            st.subheader("📡 Multi-Sensor Detection Evidence")
             
             tab0, tab1, tab2, tab3, tab4 = st.tabs(["⚖️ Risk Weighting", "SSS", "MBES", "Magnetometer", "SBP"])
 
@@ -2293,7 +2297,7 @@ elif page == "🔬 Evidence Viewer":
             )
     
     else:
-        st.info("Loading survey data automatically. If empty, navigate away and back to this page.")
+        st.info("⏳ Loading survey data automatically. If empty, navigate away and back to this page.")
 
 st.markdown("---")
 st.caption("⚡ The Grid - Powered by Multi-Sensor AI")
